@@ -121,6 +121,12 @@
     font-size: 10px; font-weight: 700; background: #F5E2D8; color: var(--coral);
     padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
   }
+  .reserved-tag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    background: var(--coral); color: #fff;
+    padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
+  }
+  li.item.reserved-item { opacity: 0.6; background: var(--paper); }
   .empty { text-align: center; padding: 34px 20px; color: var(--ink-soft); font-size: 13.5px; line-height: 1.6; }
   .empty svg { width: 30px; height: 30px; color: var(--line); margin-bottom: 10px; }
   .loading { text-align: center; padding: 40px; color: var(--ink-soft); font-size: 13px; }
@@ -422,6 +428,7 @@
   function computeMatches() {
     const matches = [];
     for (const piso of state.pisos) {
+      if (piso.reservado) continue; // reservado: no se ofrece a compradores
       for (const comprador of state.compradores) {
         const reasons = [];
         if (!zonaMatches(piso.zona, comprador.zona)) continue;
@@ -516,9 +523,9 @@
     el.innerHTML = '<ul class="list">' + state.pisos.map(p => {
       const esDeWeb = p.origen === 'nuevo' || p.origen === 'bajada_precio';
       return `
-      <li class="item">
+      <li class="item${p.reservado ? ' reserved-item' : ''}">
         <div class="item-main">
-          <div class="item-name">${esc(p.zona)}${p.tipo ? ' · ' + esc(p.tipo) : ''}${esDeWeb ? '<span class="origin-tag">Web</span>' : ''}${p.bajada_pct ? `<span class="drop-tag">-${esc(String(p.bajada_pct))}%</span>` : ''}</div>
+          <div class="item-name">${esc(p.zona)}${p.tipo ? ' · ' + esc(p.tipo) : ''}${p.reservado ? '<span class="reserved-tag">Reservado</span>' : ''}${esDeWeb ? '<span class="origin-tag">Web</span>' : ''}${p.bajada_pct ? `<span class="drop-tag">-${esc(String(p.bajada_pct))}%</span>` : ''}</div>
           <div class="item-meta"><span class="num">${fmtMoney(p.precio)}</span>${p.precio_anterior ? ` <span class="num" style="text-decoration:line-through;opacity:0.55">${fmtMoney(p.precio_anterior)}</span>` : ''}</div>
           ${p.caract ? `<div class="item-chars">${esc(p.caract)}</div>` : ''}
           <div class="item-by">${esDeWeb ? 'Detectado en la web' : 'Añadido por ' + esc(p.agente)} · ${fmtDate(p.fecha)}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" rel="noopener">Ver ficha</a>` : ''}</div>
