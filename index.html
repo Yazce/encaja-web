@@ -286,6 +286,12 @@
   function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function fmtMoney(n) { return n ? Number(n).toLocaleString('es-ES') + ' €' : '—'; }
   function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); } catch(e){ return ''; } }
+  function waLink(telefono, mensaje) {
+    let tel = (telefono || '').replace(/[\s-]/g, '');
+    if (tel.startsWith('+')) tel = tel.slice(1);
+    if (!tel.startsWith('34')) tel = '34' + tel;
+    return `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`;
+  }
 
   function showToast(msg) {
     const t = document.getElementById('toast');
@@ -569,6 +575,7 @@
         const m = matches.find(x => x.key === btn.dataset.copy);
         const msg = buildMessage(m.comprador, m.piso);
         navigator.clipboard.writeText(msg).then(() => showToast('Mensaje copiado')).catch(() => showToast('No se pudo copiar'));
+        window.open(waLink(m.comprador.telefono, msg), '_blank');
       });
     });
     el.querySelectorAll('[data-done]').forEach(btn => {
