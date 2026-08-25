@@ -127,6 +127,10 @@
     padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
   }
   li.item.reserved-item { opacity: 0.6; background: var(--paper); }
+  li.item.edit-item { display: block; }
+  li.item.edit-item .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+  li.item.edit-item .grid .full { grid-column: 1 / -1; }
+  li.item.edit-item .form-footer { margin-top: 14px; }
   .empty { text-align: center; padding: 34px 20px; color: var(--ink-soft); font-size: 13.5px; line-height: 1.6; }
   .empty svg { width: 30px; height: 30px; color: var(--line); margin-bottom: 10px; }
   .loading { text-align: center; padding: 40px; color: var(--ink-soft); font-size: 13px; }
@@ -136,6 +140,17 @@
   }
 
   .match-card { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin-bottom: 14px; overflow: hidden; }
+  .match-row {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 12px 16px; cursor: pointer; background: none; border: none;
+    font-family: inherit; font-size: 13.5px; color: inherit; text-align: left;
+  }
+  .match-row:hover { background: #FBF9F4; }
+  .match-row-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .match-row-price { font-size: 12.5px; color: var(--ink-soft); flex: none; }
+  .match-row-chevron { flex: none; width: 14px; height: 14px; color: var(--ink-soft); transition: transform 0.15s; }
+  .match-card.expanded .match-row-chevron { transform: rotate(180deg); }
+  .match-card.expanded .match-row { border-bottom: 1px solid var(--line); }
   .match-body { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: stretch; }
   .match-side { padding: 14px 16px; }
   .match-side.buyer { border-right: 1px dashed var(--line); }
@@ -194,10 +209,11 @@
   .user-bar button.ghost { font-size: 12px; padding: 5px 10px; }
 
   @media (max-width: 560px) {
-    form.entry .grid { grid-template-columns: 1fr; }
+    form.entry .grid, li.item.edit-item .grid { grid-template-columns: 1fr; }
     .match-body { grid-template-columns: 1fr; }
     .match-side.buyer { border-right: none; border-bottom: 1px dashed var(--line); }
     .match-stamp { padding: 8px; }
+    .match-row-price { display: none; }
   }
 </style>
 </head>
@@ -334,6 +350,8 @@
   let currentUser = null;
   let currentProfile = null;
   let realtimeChannel = null;
+  let editingCompradorId = null;
+  let expandedMatchKey = null;
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -615,13 +633,40 @@
     renderMatches(matches);
   }
 
+  const TIPO_OPCIONES = ['', 'Piso', 'Ático', 'Chalet', 'Casa', 'Estudio'];
+  function tipoOptionsHtml(selected) {
+    return TIPO_OPCIONES.map(o =>
+      `<option value="${o}"${o === (selected || '') ? ' selected' : ''}>${o || 'Cualquiera'}</option>`
+    ).join('');
+  }
+
+  function renderCompradorEditForm(c) {
+    return `
+      <li class="item edit-item">
+        <div class="grid">
+          <div><label>Nombre</label><input type="text" id="edit-nombre-${c.id}" value="${esc(c.nombre)}"></div>
+          <div><label>Teléfono</label><input type="tel" id="edit-telefono-${c.id}" value="${esc(c.telefono)}"></div>
+          <div><label>Zona que busca</label><input type="text" id="edit-zona-${c.id}" value="${esc(c.zona)}"></div>
+          <div><label>Tipo</label><select id="edit-tipo-${c.id}">${tipoOptionsHtml(c.tipo)}</select></div>
+          <div><label>Presupuesto máx. (€)</label><input type="number" id="edit-presupuesto-${c.id}" value="${c.presupuesto || ''}"></div>
+          <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="edit-caract-${c.id}">${esc(c.caract)}</textarea></div>
+        </div>
+        <div class="form-footer">
+          <button class="ghost" data-cancelcomprador="${c.id}">Cancelar</button>
+          <button class="primary" data-savecomprador="${c.id}">Guardar</button>
+        </div>
+      </li>`;
+  }
+
   function renderCompradores() {
     const el = document.getElementById('list-compradores');
     if (!state.compradores.length) {
       el.innerHTML = emptyState('Todavía no hay compradores en la lista. Añade el primero para empezar a encontrarles piso.');
       return;
     }
-    el.innerHTML = '<ul class="list">' + state.compradores.map(c => `
+    el.innerHTML = '<ul class="list">' + state.compradores.map(c => {
+      if (c.id === editingCompradorId) return renderCompradorEditForm(c);
+      return `
       <li class="item">
         <div class="item-main">
           <div class="item-name">${esc(c.nombre)}</div>
@@ -629,9 +674,44 @@
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
         </div>
-        <button class="del" data-list="compradores" data-table="compradores" data-id="${c.id}">Eliminar</button>
-      </li>`).join('') + '</ul>';
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
+          <button class="ghost" data-editcomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
+          <button class="del" data-list="compradores" data-table="compradores" data-id="${c.id}">Eliminar</button>
+        </div>
+      </li>`;
+    }).join('') + '</ul>';
     bindDeletes(el);
+    el.querySelectorAll('[data-editcomprador]').forEach(btn => {
+      btn.addEventListener('click', () => { editingCompradorId = btn.dataset.editcomprador; renderCompradores(); });
+    });
+    el.querySelectorAll('[data-cancelcomprador]').forEach(btn => {
+      btn.addEventListener('click', () => { editingCompradorId = null; renderCompradores(); });
+    });
+    el.querySelectorAll('[data-savecomprador]').forEach(btn => {
+      btn.addEventListener('click', () => saveComprador(btn.dataset.savecomprador));
+    });
+  }
+
+  async function saveComprador(id) {
+    const nombre = document.getElementById(`edit-nombre-${id}`).value.trim();
+    const telefono = document.getElementById(`edit-telefono-${id}`).value.trim();
+    if (!nombre || !telefono) { showToast('Nombre y teléfono son obligatorios'); return; }
+    const presupuestoVal = document.getElementById(`edit-presupuesto-${id}`).value;
+    const patch = {
+      nombre,
+      telefono,
+      zona: document.getElementById(`edit-zona-${id}`).value.trim(),
+      tipo: document.getElementById(`edit-tipo-${id}`).value,
+      presupuesto: presupuestoVal ? Number(presupuestoVal) : null,
+      caract: document.getElementById(`edit-caract-${id}`).value.trim(),
+    };
+    const { error } = await sb.from('compradores').update(patch).eq('id', id);
+    if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
+    const c = state.compradores.find(x => x.id === id);
+    if (c) Object.assign(c, patch);
+    editingCompradorId = null;
+    renderAll();
+    showToast('Comprador actualizado');
   }
 
   function renderPisos() {
@@ -674,8 +754,16 @@
       el.innerHTML = emptyState('Sin coincidencias por ahora. En cuanto un piso nuevo encaje con un comprador, aparecerá aquí.');
       return;
     }
-    el.innerHTML = matches.map(m => `
-      <div class="match-card">
+    el.innerHTML = matches.map(m => {
+      const isOpen = m.key === expandedMatchKey;
+      return `
+      <div class="match-card${isOpen ? ' expanded' : ''}">
+        <button type="button" class="match-row" data-toggle="${m.key}">
+          <span class="match-row-text"><strong>${esc(m.comprador.nombre)}</strong> coincide con ${esc(m.piso.zona)}${m.piso.tipo ? ' · ' + esc(m.piso.tipo) : ''}</span>
+          <span class="match-row-price num">${fmtMoney(m.piso.precio)}</span>
+          <svg class="match-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        ${isOpen ? `
         <div class="match-body">
           <div class="match-side buyer">
             <div class="match-label">Comprador</div>
@@ -694,9 +782,17 @@
         <div class="match-actions">
           <button class="ghost" data-copy="${m.key}">Copiar mensaje</button>
           <button class="ghost done" data-done="${m.key}">Marcar contactado</button>
-        </div>
-      </div>`).join('');
+        </div>` : ''}
+      </div>`;
+    }).join('');
 
+    el.querySelectorAll('[data-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.toggle;
+        expandedMatchKey = expandedMatchKey === key ? null : key;
+        renderAll();
+      });
+    });
     el.querySelectorAll('[data-copy]').forEach(btn => {
       btn.addEventListener('click', () => {
         const m = matches.find(x => x.key === btn.dataset.copy);
