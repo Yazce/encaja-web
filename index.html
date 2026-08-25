@@ -172,6 +172,27 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 32px 28px; max-width: 340px; width: 100%; text-align: center; }
+  .auth-card .mark { margin: 0 auto 10px; display: block; }
+  .auth-card h1 { margin: 0 0 4px; }
+  .auth-card p.auth-sub { color: var(--ink-soft); font-size: 13px; margin: 0 0 20px; line-height: 1.5; }
+  .auth-card form { text-align: left; display: flex; flex-direction: column; gap: 12px; }
+  .auth-card button.primary { margin-top: 6px; width: 100%; }
+  .auth-error {
+    color: var(--coral); font-size: 12.5px; background: #F5E9E3; border: 1px solid #E3C7B8;
+    border-radius: 6px; padding: 8px 10px; text-align: left;
+  }
+  .user-bar {
+    display: flex; justify-content: flex-end; align-items: center; gap: 10px;
+    margin-bottom: 10px; font-size: 12.5px; color: var(--ink-soft);
+  }
+  .admin-badge {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 8px;
+  }
+  .user-bar button.ghost { font-size: 12px; padding: 5px 10px; }
+
   @media (max-width: 560px) {
     form.entry .grid { grid-template-columns: 1fr; }
     .match-body { grid-template-columns: 1fr; }
@@ -181,7 +202,31 @@
 </style>
 </head>
 <body>
+
+<div id="auth-screen" class="auth-wrap">
+  <div class="auth-card">
+    <svg class="mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" width="40" height="40">
+      <path d="M4 20 L20 7 L36 20" stroke="#1C3D45" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M9 18 V33 H31 V18" stroke="#1C3D45" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="20" cy="26" r="4.5" fill="#C8963C"/>
+    </svg>
+    <h1>Encaja</h1>
+    <p class="auth-sub">Inicia sesión con la cuenta que te haya dado el equipo.</p>
+    <form id="form-login">
+      <div><label>Email</label><input type="email" id="login-email" required autocomplete="username"></div>
+      <div><label>Contraseña</label><input type="password" id="login-password" required autocomplete="current-password"></div>
+      <div id="login-error" class="auth-error" style="display:none;"></div>
+      <button type="submit" class="primary">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<div id="app-screen" style="display:none;">
 <div class="wrap">
+  <div class="user-bar">
+    <span id="user-info"></span>
+    <button id="btn-logout" class="ghost">Cerrar sesión</button>
+  </div>
   <header class="top">
     <svg class="mark" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M4 20 L20 7 L36 20" stroke="#1C3D45" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -224,7 +269,6 @@
             </select>
           </div>
           <div><label>Presupuesto máx. (€)</label><input type="number" id="c-presupuesto" placeholder="220000"></div>
-          <div><label>Quién lo añade</label><input type="text" id="c-agente" required placeholder="Tu nombre"></div>
           <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="c-caract" placeholder="3 hab, terraza, cerca del cole, con ascensor..."></textarea></div>
         </div>
         <div class="form-footer">
@@ -253,7 +297,6 @@
             </select>
           </div>
           <div><label>Precio (€)</label><input type="number" id="p-precio" placeholder="215000"></div>
-          <div><label>Quién lo añade</label><input type="text" id="p-agente" required placeholder="Tu nombre"></div>
           <div class="full"><label>Características</label><textarea id="p-caract" placeholder="3 hab, 2 baños, terraza 12m2, ascensor, para entrar a vivir..."></textarea></div>
         </div>
         <div class="form-footer">
@@ -273,6 +316,7 @@
     <div id="list-matches"><div class="loading">Cargando…</div></div>
   </section>
 </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -287,6 +331,9 @@
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const state = { compradores: [], pisos: [], contactados: {} };
+  let currentUser = null;
+  let currentProfile = null;
+  let realtimeChannel = null;
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -331,12 +378,6 @@
       (contactadosRes.data || []).forEach(r => { state.contactados[r.match_key] = r.fecha; });
 
       showConnError(null);
-
-      const agente = localStorage.getItem('encaja-agente');
-      if (agente) {
-        document.getElementById('c-agente').value = agente;
-        document.getElementById('p-agente').value = agente;
-      }
     } catch (e) {
       console.error('Error cargando datos', e);
       showConnError('No se pudo conectar con la base de datos. Revisa SUPABASE_URL / SUPABASE_ANON_KEY en index.html, y que las tablas existan.');
@@ -344,10 +385,93 @@
     renderAll();
   }
 
-  function rememberAgent(name) {
-    if (!name) return;
-    localStorage.setItem('encaja-agente', name);
+  function currentAgentName() {
+    return (currentProfile && currentProfile.nombre) || (currentUser && currentUser.email) || 'Alguien';
   }
+
+  // ---- Autenticación ----
+  function showAuthScreen(errorMsg) {
+    document.getElementById('app-screen').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'flex';
+    const err = document.getElementById('login-error');
+    if (errorMsg) { err.textContent = errorMsg; err.style.display = 'block'; }
+    else { err.style.display = 'none'; }
+  }
+
+  function showAppScreen() {
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+  }
+
+  async function loadProfile(user) {
+    const { data, error } = await sb.from('perfiles').select('nombre, is_admin').eq('id', user.id).maybeSingle();
+    if (error) { console.error('Error cargando perfil', error); return null; }
+    return data;
+  }
+
+  function renderUserBar() {
+    const el = document.getElementById('user-info');
+    const nombre = currentAgentName();
+    const badge = currentProfile && currentProfile.is_admin ? ' <span class="admin-badge">Admin</span>' : '';
+    el.innerHTML = `Conectado como ${esc(nombre)}${badge}`;
+  }
+
+  function subscribeRealtime() {
+    if (realtimeChannel) return;
+    realtimeChannel = sb.channel('encaja-cambios')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'compradores' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pisos' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contactados' }, scheduleReload)
+      .subscribe();
+  }
+
+  function unsubscribeRealtime() {
+    if (!realtimeChannel) return;
+    sb.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+
+  async function onSignedIn(session) {
+    currentUser = session.user;
+    currentProfile = await loadProfile(session.user);
+    renderUserBar();
+    showAppScreen();
+    subscribeRealtime();
+    await loadAll();
+  }
+
+  function onSignedOut() {
+    currentUser = null;
+    currentProfile = null;
+    state.compradores = [];
+    state.pisos = [];
+    state.contactados = {};
+    unsubscribeRealtime();
+    showAuthScreen();
+  }
+
+  document.getElementById('form-login').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    if (error) {
+      showAuthScreen('No se pudo iniciar sesión: revisa el email y la contraseña.');
+      return;
+    }
+    document.getElementById('login-password').value = '';
+  });
+
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    await sb.auth.signOut();
+  });
+
+  sb.auth.onAuthStateChange((event, session) => {
+    if (session) { onSignedIn(session); } else { onSignedOut(); }
+  });
 
   // ---- Tabs ----
   document.querySelectorAll('nav.tabs button').forEach(btn => {
@@ -370,15 +494,13 @@
       tipo: document.getElementById('c-tipo').value,
       presupuesto: document.getElementById('c-presupuesto').value ? Number(document.getElementById('c-presupuesto').value) : null,
       caract: document.getElementById('c-caract').value.trim(),
-      agente: document.getElementById('c-agente').value.trim(),
+      agente: currentAgentName(),
       fecha: new Date().toISOString(),
     };
     const { error } = await sb.from('compradores').insert(item);
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     state.compradores.unshift(item);
-    rememberAgent(item.agente);
     e.target.reset();
-    document.getElementById('c-agente').value = item.agente;
     renderAll();
     showToast('Comprador añadido');
   });
@@ -391,15 +513,13 @@
       tipo: document.getElementById('p-tipo').value,
       precio: document.getElementById('p-precio').value ? Number(document.getElementById('p-precio').value) : null,
       caract: document.getElementById('p-caract').value.trim(),
-      agente: document.getElementById('p-agente').value.trim(),
+      agente: currentAgentName(),
       fecha: new Date().toISOString(),
     };
     const { error } = await sb.from('pisos').insert(item);
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     state.pisos.unshift(item);
-    rememberAgent(item.agente);
     e.target.reset();
-    document.getElementById('p-agente').value = item.agente;
     renderAll();
     showToast('Piso añadido — revisando coincidencias');
   });
@@ -597,19 +717,16 @@
     </div>`;
   }
 
-  // ---- Sincronización en vivo entre todo el equipo ----
+  // ---- Sincronización en vivo entre todo el equipo (suscrita tras iniciar sesión) ----
   let realtimeTimer = null;
   function scheduleReload() {
     clearTimeout(realtimeTimer);
     realtimeTimer = setTimeout(loadAll, 400);
   }
-  sb.channel('encaja-cambios')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'compradores' }, scheduleReload)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'pisos' }, scheduleReload)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'contactados' }, scheduleReload)
-    .subscribe();
 
-  loadAll();
+  // Nota: onAuthStateChange() se dispara también nada más suscribirse (evento
+  // INITIAL_SESSION, con la sesión guardada si la había), así que con ese
+  // listener ya registrado arriba no hace falta comprobar la sesión aparte.
 })();
 </script>
 </body>

@@ -1,7 +1,13 @@
 -- Encaja · esquema inicial de Supabase
 -- Pega TODO este archivo en Supabase → SQL Editor → New query → Run.
--- Crea las 3 tablas, las políticas de acceso y carga los 108 pisos
--- actuales como datos iniciales.
+-- Crea las tablas, el login por compañero (Supabase Auth), las
+-- políticas de acceso y carga los 108 pisos actuales como datos
+-- iniciales.
+--
+-- Después de correr esto, cada compañero necesita una cuenta creada a
+-- mano desde el panel de Supabase (Authentication → Users → Add user)
+-- — ver el README para el paso a paso. Sin login, nadie puede entrar
+-- a la web.
 
 create table if not exists public.compradores (
   id text primary key,
@@ -12,6 +18,7 @@ create table if not exists public.compradores (
   presupuesto numeric,
   caract text,
   agente text not null,
+  owner_id uuid references auth.users(id) default auth.uid(),
   fecha timestamptz not null default now()
 );
 
@@ -36,27 +43,94 @@ create table if not exists public.contactados (
   fecha timestamptz not null default now()
 );
 
--- RLS: la app no tiene login propio (se comparte por enlace, igual que
--- antes), así que cualquiera que tenga la URL y la clave pública
--- (anon key) puede leer y escribir. Es el mismo modelo de confianza que
--- ya tenía la versión anterior de Encaja ("se comparte con todo el
--- equipo que tenga este enlace").
+-- Perfil de cada usuario: su nombre para mostrar y si es admin.
+create table if not exists public.perfiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  nombre text,
+  is_admin boolean not null default false,
+  creado timestamptz not null default now()
+);
+
+alter table public.perfiles enable row level security;
+
+drop policy if exists "perfiles_select_propio" on public.perfiles;
+create policy "perfiles_select_propio" on public.perfiles
+  for select using (auth.uid() = id);
+
+drop policy if exists "perfiles_update_propio" on public.perfiles;
+create policy "perfiles_update_propio" on public.perfiles
+  for update using (auth.uid() = id) with check (auth.uid() = id);
+
+-- Crea el perfil automáticamente en cuanto se crea un usuario nuevo
+-- (por ejemplo, al añadirlo a mano desde Authentication → Users).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.perfiles (id, nombre)
+  values (new.id, coalesce(new.raw_user_meta_data->>'nombre', new.email))
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ¿El usuario que hace la consulta es admin? (para las políticas de abajo)
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select is_admin from public.perfiles where id = auth.uid()), false);
+$$;
+
+-- RLS: hace falta sesión iniciada para usar la web. Los pisos son un
+-- catálogo compartido por todo el equipo (sin dueño individual). Los
+-- compradores sí quedan ligados a quien los creó: un agente normal
+-- solo ve los suyos; un admin los ve todos.
 
 alter table public.compradores enable row level security;
 alter table public.pisos enable row level security;
 alter table public.contactados enable row level security;
 
 drop policy if exists "compradores_all" on public.compradores;
-create policy "compradores_all" on public.compradores
-  for all using (true) with check (true);
+drop policy if exists "compradores_select" on public.compradores;
+drop policy if exists "compradores_insert" on public.compradores;
+drop policy if exists "compradores_update" on public.compradores;
+drop policy if exists "compradores_delete" on public.compradores;
 
+create policy "compradores_select" on public.compradores
+  for select using (owner_id = auth.uid() or public.is_admin());
+
+create policy "compradores_insert" on public.compradores
+  for insert with check (owner_id = auth.uid());
+
+create policy "compradores_update" on public.compradores
+  for update using (owner_id = auth.uid() or public.is_admin())
+  with check (owner_id = auth.uid() or public.is_admin());
+
+create policy "compradores_delete" on public.compradores
+  for delete using (owner_id = auth.uid() or public.is_admin());
+
+-- El scraper de encaja-scraper escribe en "pisos" con la
+-- service_role key, que siempre salta la RLS — estas políticas solo
+-- afectan a la web (que usa la anon key + sesión de usuario).
 drop policy if exists "pisos_all" on public.pisos;
 create policy "pisos_all" on public.pisos
-  for all using (true) with check (true);
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
 
 drop policy if exists "contactados_all" on public.contactados;
 create policy "contactados_all" on public.contactados
-  for all using (true) with check (true);
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
 
 -- Datos iniciales: los 108 pisos ya detectados por el scraper.
 insert into public.pisos
