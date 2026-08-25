@@ -229,7 +229,7 @@
     <h1>Encaja</h1>
     <p class="auth-sub">Inicia sesión con la cuenta que te haya dado el equipo.</p>
     <form id="form-login">
-      <div><label>Email</label><input type="email" id="login-email" required autocomplete="username"></div>
+      <div><label>Usuario</label><input type="text" id="login-username" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
       <div><label>Contraseña</label><input type="password" id="login-password" required autocomplete="current-password"></div>
       <div id="login-error" class="auth-error" style="display:none;"></div>
       <button type="submit" class="primary">Entrar</button>
@@ -346,6 +346,21 @@
 
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+  // Login por nombre de usuario: Supabase Auth sigue usando email por dentro,
+  // así que "yaz" se traduce a "yaz@inmoparadise.local" antes de mandarlo, y
+  // al revés para mostrarlo (para que nadie vea ni escriba un email real).
+  const AUTH_EMAIL_DOMAIN = '@inmoparadise.local';
+  function usernameToEmail(usuario) {
+    const u = (usuario || '').trim();
+    return u.includes('@') ? u : u.toLowerCase() + AUTH_EMAIL_DOMAIN;
+  }
+  function emailToUsername(email) {
+    if (!email) return '';
+    return email.toLowerCase().endsWith(AUTH_EMAIL_DOMAIN)
+      ? email.slice(0, email.length - AUTH_EMAIL_DOMAIN.length)
+      : email;
+  }
+
   const state = { compradores: [], pisos: [], contactados: {} };
   let currentUser = null;
   let currentProfile = null;
@@ -404,7 +419,7 @@
   }
 
   function currentAgentName() {
-    return (currentProfile && currentProfile.nombre) || (currentUser && currentUser.email) || 'Alguien';
+    return (currentProfile && currentProfile.nombre) || (currentUser && emailToUsername(currentUser.email)) || 'Alguien';
   }
 
   // ---- Autenticación ----
@@ -470,14 +485,15 @@
 
   document.getElementById('form-login').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('login-email').value.trim();
+    const usuario = document.getElementById('login-username').value;
+    const email = usernameToEmail(usuario);
     const password = document.getElementById('login-password').value;
     const btn = e.target.querySelector('button[type=submit]');
     btn.disabled = true;
     const { error } = await sb.auth.signInWithPassword({ email, password });
     btn.disabled = false;
     if (error) {
-      showAuthScreen('No se pudo iniciar sesión: revisa el email y la contraseña.');
+      showAuthScreen('No se pudo iniciar sesión: revisa el usuario y la contraseña.');
       return;
     }
     document.getElementById('login-password').value = '';

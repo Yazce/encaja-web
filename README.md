@@ -81,52 +81,77 @@ solo automáticamente.
 
 ## 5. Crear una cuenta por compañero
 
-La web pide login (email + contraseña) y no tiene registro público:
+La web pide login (usuario + contraseña) y no tiene registro público:
 las cuentas las crea un admin a mano desde el panel de Supabase.
+
+En la pantalla de login, la persona solo ve y escribe un **nombre de
+usuario** corto (p. ej. `yaz`), nunca un email. Por dentro, Supabase
+Auth sigue funcionando con emails como siempre — la web traduce sola
+`yaz` a `yaz@inmoparadise.local` antes de iniciar sesión, y hace lo
+contrario al mostrar quién está conectado. Por eso, al crear la
+cuenta en Supabase, el email que le pongas debe seguir ese mismo
+patrón: `usuario@inmoparadise.local` (dominio inventado, no hace
+falta que exista de verdad — Supabase no manda ningún correo ahí
+porque la cuenta se crea con Auto Confirm).
 
 1. En Supabase, ve a **Authentication** → **Users** → **Add user** →
    **Create new user**.
-2. Rellena su **Email** y una **contraseña** provisional (que el
-   compañero puede cambiar luego desde el propio Supabase si hace
-   falta, o mándasela tú por un canal seguro). Marca **Auto Confirm
-   User** para que no tenga que verificar el email.
+2. En **Email**, pon `usuario@inmoparadise.local` usando como
+   "usuario" el nombre corto que quieras que teclee esa persona para
+   entrar (todo en minúsculas, sin espacios, p. ej. `maria` para
+   `maria@inmoparadise.local`). Rellena una **contraseña** provisional
+   (que el compañero puede cambiar luego desde el propio Supabase si
+   hace falta, o mándasela tú por un canal seguro). Marca **Auto
+   Confirm User** — obligatorio aquí, porque ese email no es real y
+   nunca podría confirmarse solo.
 3. (Opcional pero recomendado) En **User Metadata**, añade:
    ```json
    {"nombre": "Nombre y Apellido"}
    ```
-   Así aparecerá con su nombre en vez de su email dentro de la web
-   ("Añadido por ..."). Si lo dejas en blanco, se usa el email.
-4. Pulsa **Create user**. Ya puede iniciar sesión en la web con ese
-   email y esa contraseña.
+   Así aparecerá con su nombre completo en vez de su usuario dentro
+   de la web ("Añadido por ..."). Si lo dejas en blanco, se usa el
+   usuario (la parte antes de `@inmoparadise.local`).
+4. Pulsa **Create user**. Ya puede iniciar sesión en la web
+   escribiendo solo `usuario` (sin el `@inmoparadise.local`) y esa
+   contraseña.
 5. Para que alguien sea **admin** (ve los compradores de todo el
    equipo, no solo los suyos): ve a **SQL Editor** y ejecuta,
-   sustituyendo el email:
+   sustituyendo el usuario:
    ```sql
    update public.perfiles
    set is_admin = true
-   where id = (select id from auth.users where email = 'compañera@ejemplo.com');
+   where id = (select id from auth.users where email = 'usuario@inmoparadise.local');
    ```
    Por defecto, cualquier cuenta nueva se crea como agente normal
    (`is_admin = false`).
 6. Si ya teníais compradores cargados desde antes de activar el
    login, quedan sin dueño hasta que los liguéis a un compañero (si
    no, solo los ve un admin). Para cada uno, ejecuta en el SQL
-   Editor, sustituyendo el email y el nombre exacto que aparece en
+   Editor, sustituyendo el usuario y el nombre exacto que aparece en
    "Añadido por ...":
    ```sql
    update public.compradores
-   set owner_id = (select id from auth.users where email = 'compañera@ejemplo.com')
+   set owner_id = (select id from auth.users where email = 'usuario@inmoparadise.local')
    where agente = 'NombreExacto';
    ```
 
+> Nota: las cuentas creadas antes de este cambio (con un email real,
+> tipo `nombre@gmail.com`) siguen funcionando igual — para esas, la
+> persona debe escribir su email completo en el campo "Usuario" (la
+> web solo añade `@inmoparadise.local` si lo que se escribe no
+> contiene ya una `@`). Si prefieres unificar, puedes cambiarle el
+> email desde **Authentication** → **Users** → esa cuenta → **Edit
+> user** por uno con el patrón `usuario@inmoparadise.local`.
+
 ## Notas
 
-- Hace falta login (Supabase Auth, email + contraseña) para entrar a
-  la web; no hay registro público, las cuentas las crea un admin a
-  mano (ver el paso 5 de arriba). Cada comprador queda ligado a quien
-  lo creó: un agente normal solo ve sus propios compradores y sus
-  propias coincidencias; un admin los ve todos. El catálogo de pisos
-  lo ve y edita todo el mundo por igual, como antes.
+- Hace falta login (Supabase Auth por dentro, pero en pantalla se
+  pide solo "Usuario" + contraseña — sin mostrar ningún email) para
+  entrar a la web; no hay registro público, las cuentas las crea un
+  admin a mano (ver el paso 5 de arriba). Cada comprador queda ligado
+  a quien lo creó: un agente normal solo ve sus propios compradores y
+  sus propias coincidencias; un admin los ve todos. El catálogo de
+  pisos lo ve y edita todo el mundo por igual, como antes.
 - La web se sincroniza sola entre todos los que la tengan abierta
   (usa Supabase Realtime): si alguien añade un piso o un comprador,
   al resto del equipo se les actualiza la lista sin recargar.
