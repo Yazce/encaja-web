@@ -228,6 +228,7 @@
     background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 8px;
   }
   .user-bar button.ghost { font-size: 12px; padding: 5px 10px; }
+  .user-bar button.ghost.notif-on { background: var(--sea-bg); color: var(--sea); border-color: #CFDFD8; }
 
   @media (max-width: 560px) {
     form.entry .grid, li.item.edit-item .grid { grid-template-columns: 1fr; }
@@ -262,6 +263,7 @@
 <div class="wrap">
   <div class="user-bar">
     <span id="user-info"></span>
+    <button id="btn-notif" class="ghost" type="button">🔔 Activar avisos</button>
     <button id="btn-logout" class="ghost">Cerrar sesión</button>
   </div>
   <header class="top">
@@ -397,6 +399,75 @@
   let editingCompradorId = null;
   let expandedMatchKey = null;
 
+  // ---- Avisos de coincidencias nuevas (notificación del navegador) ----
+  const NOTIF_STORAGE_KEY = 'encaja-notified-matches';
+  const NOTIF_SEEDED_KEY = 'encaja-notif-seeded';
+  function loadNotifiedKeys() {
+    try { return new Set(JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || '[]')); }
+    catch (e) { return new Set(); }
+  }
+  function saveNotifiedKeys(set) {
+    try { localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(Array.from(set).slice(-1000))); }
+    catch (e) {}
+  }
+  let notifiedMatchKeys = loadNotifiedKeys();
+
+  function notifSupported() { return typeof Notification !== 'undefined'; }
+  function notifPermissionGranted() { return notifSupported() && Notification.permission === 'granted'; }
+
+  function updateNotifButton() {
+    const btn = document.getElementById('btn-notif');
+    if (!btn) return;
+    if (!notifSupported()) { btn.textContent = '🔕 Avisos no disponibles'; btn.disabled = true; btn.classList.remove('notif-on'); return; }
+    if (Notification.permission === 'granted') { btn.textContent = '🔔 Avisos activados'; btn.classList.add('notif-on'); }
+    else if (Notification.permission === 'denied') { btn.textContent = '🔕 Avisos bloqueados'; btn.classList.remove('notif-on'); }
+    else { btn.textContent = '🔔 Activar avisos'; btn.classList.remove('notif-on'); }
+  }
+
+  async function requestNotifPermission() {
+    if (!notifSupported()) { showToast('Este navegador no admite avisos'); return; }
+    if (Notification.permission === 'granted') { showToast('Los avisos ya están activados'); updateNotifButton(); return; }
+    if (Notification.permission === 'denied') { showToast('Los avisos están bloqueados, actívalos en los ajustes del navegador'); return; }
+    const perm = await Notification.requestPermission();
+    updateNotifButton();
+    if (perm === 'granted') {
+      showToast('Avisos activados');
+      try { new Notification('Encaja', { body: 'Te avisaremos aquí cuando entre un piso que encaje con un comprador.' }); } catch (e) {}
+    } else {
+      showToast('No se activaron los avisos');
+    }
+  }
+
+  function checkNewMatchesForNotif(matches) {
+    const currentKeys = new Set(matches.map(m => m.key));
+    let seeded = false;
+    try { seeded = localStorage.getItem(NOTIF_SEEDED_KEY) === '1'; } catch (e) {}
+    if (!seeded) {
+      // Primera vez: no avisamos de coincidencias que ya existían, solo de las nuevas a partir de ahora.
+      notifiedMatchKeys = currentKeys;
+      saveNotifiedKeys(notifiedMatchKeys);
+      try { localStorage.setItem(NOTIF_SEEDED_KEY, '1'); } catch (e) {}
+      return;
+    }
+    const nuevos = matches.filter(m => !notifiedMatchKeys.has(m.key));
+    notifiedMatchKeys = currentKeys;
+    saveNotifiedKeys(notifiedMatchKeys);
+    if (!nuevos.length || !notifPermissionGranted()) return;
+    nuevos.forEach(m => {
+      try {
+        const n = new Notification('Encaja — nueva coincidencia', {
+          body: `${m.comprador.nombre} encaja con ${m.piso.zona}${m.piso.tipo ? ' · ' + m.piso.tipo : ''} · ${fmtMoney(m.piso.precio)}`,
+          tag: m.key,
+        });
+        n.onclick = () => {
+          window.focus();
+          document.querySelector('nav.tabs button[data-tab="matches"]')?.click();
+          n.close();
+        };
+      } catch (e) { console.error('No se pudo mostrar el aviso', e); }
+    });
+  }
+
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function fmtMoney(n) { return n ? Number(n).toLocaleString('es-ES') + ' €' : '—'; }
@@ -439,6 +510,7 @@
       state.contactados = {};
       (contactadosRes.data || []).forEach(r => { state.contactados[r.match_key] = r.fecha; });
 
+      checkNewMatchesForNotif(computeMatches());
       showConnError(null);
     } catch (e) {
       console.error('Error cargando datos', e);
@@ -498,6 +570,7 @@
     currentProfile = await loadProfile(session.user);
     renderUserBar();
     showAppScreen();
+    updateNotifButton();
     subscribeRealtime();
     await loadAll();
   }
@@ -531,6 +604,8 @@
   document.getElementById('btn-logout').addEventListener('click', async () => {
     await sb.auth.signOut();
   });
+
+  document.getElementById('btn-notif').addEventListener('click', requestNotifPermission);
 
   sb.auth.onAuthStateChange((event, session) => {
     if (session) { onSignedIn(session); } else { onSignedOut(); }
