@@ -1088,7 +1088,7 @@
     document.getElementById('count-alq-pisos').textContent = state.alquilerPisos.length;
     const matchesAlq = computeMatchesAlquiler();
     document.getElementById('count-alq-matches').textContent = matchesAlq.length;
-    document.getElementById('count-alquiler').textContent = matchesAlq.length;
+    document.getElementById('count-alquiler').textContent = state.alquilerClientes.length + state.alquilerPisos.length;
     renderAlqClientes();
     renderAlqPisos();
     renderMatchesAlquiler(matchesAlq);
