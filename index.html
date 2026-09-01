@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Encaja · Inmoparadise</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1C3D45">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Encaja">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
@@ -1453,6 +1461,16 @@
   // Nota: onAuthStateChange() se dispara también nada más suscribirse (evento
   // INITIAL_SESSION, con la sesión guardada si la había), así que con ese
   // listener ya registrado arriba no hace falta comprobar la sesión aparte.
+
+  // Registra el service worker para que el navegador pueda instalar
+  // Encaja como app (icono en el móvil, se abre a pantalla completa).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.error('No se pudo registrar el service worker de Encaja', err);
+      });
+    });
+  }
 })();
 </script>
 </body>
