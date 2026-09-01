@@ -66,6 +66,26 @@
   .panel.active { display: block; animation: fadeIn 0.2s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
+  nav.subtabs {
+    display: flex; gap: 2px; border-bottom: 2px solid var(--line); margin: 4px 0 18px;
+  }
+  nav.subtabs button {
+    appearance: none; border: none; background: none; cursor: pointer;
+    font-family: inherit; font-size: 13px; font-weight: 600; color: var(--ink-soft);
+    padding: 8px 14px 10px; border-radius: 7px 7px 0 0; position: relative; top: 2px;
+    display: flex; align-items: center; gap: 7px; transition: color 0.15s;
+  }
+  nav.subtabs button .count {
+    font-family: ui-monospace, monospace; font-size: 10.5px; font-weight: 600;
+    background: var(--line); color: var(--ink-soft); padding: 1px 6px; border-radius: 10px;
+  }
+  nav.subtabs button.active { color: var(--ink); border-bottom: 2px solid var(--sea); }
+  nav.subtabs button.active .count { background: var(--sea); color: #fff; }
+  nav.subtabs button:not(.active):hover { color: var(--ink); }
+
+  .subpanel { display: none; }
+  .subpanel.active { display: block; animation: fadeIn 0.2s ease; }
+
   .card {
     background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     padding: 18px 20px;
@@ -307,6 +327,7 @@
     <button data-tab="compradores" class="active">Compradores <span class="count" id="count-compradores">0</span></button>
     <button data-tab="pisos">Pisos nuevos <span class="count" id="count-pisos">0</span></button>
     <button data-tab="matches">Coincidencias <span class="count" id="count-matches">0</span></button>
+    <button data-tab="alquiler">Alquiler <span class="count" id="count-alquiler">0</span></button>
   </nav>
 
   <!-- COMPRADORES -->
@@ -380,6 +401,80 @@
     <h2 class="section-title">Coincidencias activas</h2>
     <div id="list-matches"><div class="loading">Cargando…</div></div>
   </section>
+
+  <!-- ALQUILER (independiente de Compradores/Pisos/Coincidencias de compraventa) -->
+  <section class="panel" id="panel-alquiler">
+    <nav class="subtabs">
+      <button data-subtab="alq-clientes" class="active">Buscan alquiler <span class="count" id="count-alq-clientes">0</span></button>
+      <button data-subtab="alq-pisos">Pisos en alquiler <span class="count" id="count-alq-pisos">0</span></button>
+      <button data-subtab="alq-matches">Coincidencias <span class="count" id="count-alq-matches">0</span></button>
+    </nav>
+    <div id="alquiler-setup-note" class="conn-error" style="display:none;">
+      Todavía no se ha creado la parte de alquiler en la base de datos. Pide que ejecuten el SQL de configuración de Alquiler en Supabase.
+    </div>
+
+    <div class="subpanel active" id="subpanel-alq-clientes">
+      <div class="card entry">
+        <form id="form-alq-cliente" class="entry">
+          <h2 class="section-title">Añadir quien busca alquiler</h2>
+          <div class="grid">
+            <div><label>Nombre</label><input type="text" id="ac-nombre" required placeholder="María López"></div>
+            <div><label>Teléfono</label><input type="tel" id="ac-telefono" required placeholder="612 345 678"></div>
+            <div><label>Zona que busca</label><input type="text" id="ac-zona" placeholder="Playa San Juan"></div>
+            <div>
+              <label>Tipo</label>
+              <select id="ac-tipo">
+                <option value="">Cualquiera</option>
+                <option>Piso</option><option>Ático</option><option>Chalet</option><option>Casa</option><option>Estudio</option>
+              </select>
+            </div>
+            <div><label>Renta máx. (€/mes)</label><input type="number" id="ac-presupuesto" placeholder="1100"></div>
+            <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="ac-caract" placeholder="2 hab, amueblado, con ascensor..."></textarea></div>
+          </div>
+          <div class="form-footer">
+            <span class="hint">Esta lista es solo de alquiler, no se mezcla con Compradores.</span>
+            <button type="submit" class="primary">Añadir</button>
+          </div>
+        </form>
+      </div>
+      <div style="height:20px"></div>
+      <h2 class="section-title">Buscan alquiler</h2>
+      <div id="list-alq-clientes"><div class="loading">Cargando…</div></div>
+    </div>
+
+    <div class="subpanel" id="subpanel-alq-pisos">
+      <div class="card entry">
+        <form id="form-alq-piso" class="entry">
+          <h2 class="section-title">Añadir piso en alquiler</h2>
+          <div class="grid">
+            <div><label>Zona</label><input type="text" id="ap-zona" required placeholder="Playa San Juan"></div>
+            <div>
+              <label>Tipo</label>
+              <select id="ap-tipo">
+                <option value="">Sin especificar</option>
+                <option>Piso</option><option>Ático</option><option>Chalet</option><option>Casa</option><option>Estudio</option>
+              </select>
+            </div>
+            <div><label>Renta (€/mes)</label><input type="number" id="ap-precio" placeholder="900"></div>
+            <div><label>Enlace (opcional)</label><input type="url" id="ap-url" placeholder="https://..."></div>
+            <div class="full"><label>Características</label><textarea id="ap-caract" placeholder="2 hab, amueblado, con ascensor..."></textarea></div>
+          </div>
+          <div class="form-footer">
+            <span class="hint">Se añaden a mano — todavía no hay ninguna fuente automática de alquileres.</span>
+            <button type="submit" class="primary">Añadir piso en alquiler</button>
+          </div>
+        </form>
+      </div>
+      <div style="height:20px"></div>
+      <h2 class="section-title">Pisos en alquiler</h2>
+      <div id="list-alq-pisos"><div class="loading">Cargando…</div></div>
+    </div>
+
+    <div class="subpanel" id="subpanel-alq-matches">
+      <h2 class="section-title">Coincidencias de alquiler</h2>
+      <div id="list-alq-matches"><div class="loading">Cargando…</div></div>
+    </div>
+  </section>
 </div>
 </div>
 
@@ -410,11 +505,15 @@
       : email;
   }
 
-  const state = { compradores: [], pisos: [], contactados: {} };
+  const state = {
+    compradores: [], pisos: [], contactados: {},
+    alquilerClientes: [], alquilerPisos: [], alquilerContactados: {},
+  };
   let currentUser = null;
   let currentProfile = null;
   let realtimeChannel = null;
   let editingCompradorId = null;
+  let editingAlqClienteId = null;
   let expandedMatchKey = null;
 
   // ---- Avisos de coincidencias nuevas (notificación del navegador) ----
@@ -486,6 +585,48 @@
     });
   }
 
+  // Mismo mecanismo de avisos, pero para las coincidencias de Alquiler (independiente de compraventa).
+  const NOTIF_STORAGE_KEY_ALQ = 'encaja-notified-matches-alquiler';
+  const NOTIF_SEEDED_KEY_ALQ = 'encaja-notif-seeded-alquiler';
+  let notifiedMatchKeysAlq = loadNotifiedKeysFrom(NOTIF_STORAGE_KEY_ALQ);
+  function loadNotifiedKeysFrom(storageKey) {
+    try { return new Set(JSON.parse(localStorage.getItem(storageKey) || '[]')); }
+    catch (e) { return new Set(); }
+  }
+  function saveNotifiedKeysAlq(set) {
+    try { localStorage.setItem(NOTIF_STORAGE_KEY_ALQ, JSON.stringify(Array.from(set).slice(-1000))); }
+    catch (e) {}
+  }
+  function checkNewMatchesForNotifAlquiler(matches) {
+    const currentKeys = new Set(matches.map(m => m.key));
+    let seeded = false;
+    try { seeded = localStorage.getItem(NOTIF_SEEDED_KEY_ALQ) === '1'; } catch (e) {}
+    if (!seeded) {
+      notifiedMatchKeysAlq = currentKeys;
+      saveNotifiedKeysAlq(notifiedMatchKeysAlq);
+      try { localStorage.setItem(NOTIF_SEEDED_KEY_ALQ, '1'); } catch (e) {}
+      return;
+    }
+    const nuevos = matches.filter(m => !notifiedMatchKeysAlq.has(m.key));
+    notifiedMatchKeysAlq = currentKeys;
+    saveNotifiedKeysAlq(notifiedMatchKeysAlq);
+    if (!nuevos.length || !notifPermissionGranted()) return;
+    nuevos.forEach(m => {
+      try {
+        const n = new Notification('Encaja — nueva coincidencia de alquiler', {
+          body: `${m.comprador.nombre} encaja con ${m.piso.zona}${m.piso.tipo ? ' · ' + m.piso.tipo : ''} · ${fmtMoney(m.piso.precio)}/mes`,
+          tag: m.key,
+        });
+        n.onclick = () => {
+          window.focus();
+          document.querySelector('nav.tabs button[data-tab="alquiler"]')?.click();
+          document.querySelector('nav.subtabs button[data-subtab="alq-matches"]')?.click();
+          n.close();
+        };
+      } catch (e) { console.error('No se pudo mostrar el aviso', e); }
+    });
+  }
+
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function fmtMoney(n) { return n ? Number(n).toLocaleString('es-ES') + ' €' : '—'; }
@@ -534,6 +675,32 @@
       console.error('Error cargando datos', e);
       showConnError('No se pudo conectar con la base de datos. Revisa SUPABASE_URL / SUPABASE_ANON_KEY en index.html, y que las tablas existan.');
     }
+
+    // Alquiler vive en tablas aparte: si todavía no se ha ejecutado el SQL
+    // de configuración, esto falla solo, sin tocar Compradores/Pisos/Coincidencias.
+    try {
+      const [alqClientesRes, alqPisosRes, alqContactadosRes] = await Promise.all([
+        sb.from('alquiler_clientes').select('*').order('fecha', { ascending: false }),
+        sb.from('alquiler_pisos').select('*').order('fecha', { ascending: false }),
+        sb.from('alquiler_contactados').select('*'),
+      ]);
+      if (alqClientesRes.error) throw alqClientesRes.error;
+      if (alqPisosRes.error) throw alqPisosRes.error;
+      if (alqContactadosRes.error) throw alqContactadosRes.error;
+
+      state.alquilerClientes = alqClientesRes.data || [];
+      state.alquilerPisos = alqPisosRes.data || [];
+      state.alquilerContactados = {};
+      (alqContactadosRes.data || []).forEach(r => { state.alquilerContactados[r.match_key] = r.fecha; });
+
+      checkNewMatchesForNotifAlquiler(computeMatchesAlquiler());
+      const note = document.getElementById('alquiler-setup-note');
+      if (note) note.style.display = 'none';
+    } catch (e) {
+      console.error('Error cargando datos de alquiler (¿falta ejecutar el SQL de Alquiler?)', e);
+      const note = document.getElementById('alquiler-setup-note');
+      if (note) note.style.display = 'block';
+    }
     renderAll();
   }
 
@@ -574,6 +741,9 @@
       .on('postgres_changes', { event: '*', schema: 'public', table: 'compradores' }, scheduleReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pisos' }, scheduleReload)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'contactados' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alquiler_clientes' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alquiler_pisos' }, scheduleReload)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'alquiler_contactados' }, scheduleReload)
       .subscribe();
   }
 
@@ -639,6 +809,16 @@
     });
   });
 
+  // ---- Subtabs de Alquiler ----
+  document.querySelectorAll('nav.subtabs button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('nav.subtabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.subpanel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('subpanel-' + btn.dataset.subtab).classList.add('active');
+    });
+  });
+
   // ---- Forms ----
   document.getElementById('form-comprador').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -681,6 +861,48 @@
     showToast('Piso añadido — revisando coincidencias');
   });
 
+  // ---- Alquiler (independiente de Compradores/Pisos) ----
+  document.getElementById('form-alq-cliente').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const item = {
+      id: uid(),
+      nombre: document.getElementById('ac-nombre').value.trim(),
+      telefono: document.getElementById('ac-telefono').value.trim(),
+      zona: document.getElementById('ac-zona').value.trim(),
+      tipo: document.getElementById('ac-tipo').value,
+      presupuesto: document.getElementById('ac-presupuesto').value ? Number(document.getElementById('ac-presupuesto').value) : null,
+      caract: document.getElementById('ac-caract').value.trim(),
+      agente: currentAgentName(),
+      fecha: new Date().toISOString(),
+    };
+    const { error } = await sb.from('alquiler_clientes').insert(item);
+    if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
+    state.alquilerClientes.unshift(item);
+    e.target.reset();
+    renderAll();
+    showToast('Añadido a Alquiler');
+  });
+
+  document.getElementById('form-alq-piso').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const item = {
+      id: uid(),
+      zona: document.getElementById('ap-zona').value.trim(),
+      tipo: document.getElementById('ap-tipo').value,
+      precio: document.getElementById('ap-precio').value ? Number(document.getElementById('ap-precio').value) : null,
+      caract: document.getElementById('ap-caract').value.trim(),
+      url: document.getElementById('ap-url').value.trim() || null,
+      agente: currentAgentName(),
+      fecha: new Date().toISOString(),
+    };
+    const { error } = await sb.from('alquiler_pisos').insert(item);
+    if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
+    state.alquilerPisos.unshift(item);
+    e.target.reset();
+    renderAll();
+    showToast('Piso en alquiler añadido — revisando coincidencias');
+  });
+
   // ---- Delete ----
   async function deleteItem(list, table, id) {
     const { error } = await sb.from(table).delete().eq('id', id);
@@ -718,6 +940,25 @@
         const key = comprador.id + '::' + piso.id;
         if (state.contactados[key]) continue;
         matches.push({ key, comprador, piso, reasons });
+      }
+    }
+    return matches;
+  }
+
+  function computeMatchesAlquiler() {
+    const matches = [];
+    for (const piso of state.alquilerPisos) {
+      for (const cliente of state.alquilerClientes) {
+        const reasons = [];
+        if (!zonaMatches(piso.zona, cliente.zona)) continue;
+        reasons.push('Zona');
+        if (cliente.tipo && piso.tipo && cliente.tipo !== piso.tipo) continue;
+        if (cliente.tipo && piso.tipo) reasons.push('Tipo');
+        if (cliente.presupuesto && piso.precio && piso.precio > cliente.presupuesto) continue;
+        if (cliente.presupuesto && piso.precio) reasons.push('Presupuesto');
+        const key = cliente.id + '::' + piso.id;
+        if (state.alquilerContactados[key]) continue;
+        matches.push({ key, comprador: cliente, piso, reasons });
       }
     }
     return matches;
@@ -790,6 +1031,15 @@
     renderAll();
   }
 
+  async function markContactedBatchAlquiler(keys) {
+    if (!keys.length) return;
+    const fecha = new Date().toISOString();
+    const { error } = await sb.from('alquiler_contactados').upsert(keys.map(key => ({ match_key: key, fecha })));
+    if (error) { console.error(error); showToast('No se pudo guardar'); return; }
+    keys.forEach(key => { state.alquilerContactados[key] = fecha; });
+    renderAll();
+  }
+
   async function editPrecio(id) {
     const piso = state.pisos.find(p => p.id === id);
     if (!piso) return;
@@ -810,6 +1060,20 @@
     showToast('Precio actualizado — revisando coincidencias');
   }
 
+  async function editPrecioAlquiler(id) {
+    const piso = state.alquilerPisos.find(p => p.id === id);
+    if (!piso) return;
+    const nuevo = prompt(`Nueva renta mensual para ${piso.zona} (actual: ${fmtMoney(piso.precio)})`, piso.precio || '');
+    if (nuevo === null) return;
+    const nuevoNum = Number(nuevo);
+    if (!nuevoNum || nuevoNum <= 0) { showToast('Renta no válida'); return; }
+    const { error } = await sb.from('alquiler_pisos').update({ precio: nuevoNum }).eq('id', id);
+    if (error) { console.error(error); showToast('No se pudo actualizar'); return; }
+    piso.precio = nuevoNum;
+    renderAll();
+    showToast('Renta actualizada — revisando coincidencias');
+  }
+
   // ---- Render ----
   function renderAll() {
     document.getElementById('count-compradores').textContent = state.compradores.length;
@@ -819,6 +1083,15 @@
     renderCompradores();
     renderPisos();
     renderMatches(matches);
+
+    document.getElementById('count-alq-clientes').textContent = state.alquilerClientes.length;
+    document.getElementById('count-alq-pisos').textContent = state.alquilerPisos.length;
+    const matchesAlq = computeMatchesAlquiler();
+    document.getElementById('count-alq-matches').textContent = matchesAlq.length;
+    document.getElementById('count-alquiler').textContent = matchesAlq.length;
+    renderAlqClientes();
+    renderAlqPisos();
+    renderMatchesAlquiler(matchesAlq);
   }
 
   const TIPO_OPCIONES = ['', 'Piso', 'Ático', 'Chalet', 'Casa', 'Estudio'];
@@ -957,6 +1230,156 @@
     bindDeletes(el);
     el.querySelectorAll('[data-editprecio]').forEach(btn => {
       btn.addEventListener('click', () => editPrecio(btn.dataset.editprecio));
+    });
+  }
+
+  // ---- Alquiler: render (independiente de Compradores/Pisos) ----
+  function alqClienteRowHtml(c) {
+    return `
+      <li class="item">
+        <div class="item-main">
+          <div class="item-name">${esc(c.nombre)}</div>
+          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>/mes</div>
+          ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
+          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
+          <button class="ghost" data-editalqcliente="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
+          <button class="del" data-list="alquilerClientes" data-table="alquiler_clientes" data-id="${c.id}">Eliminar</button>
+        </div>
+      </li>`;
+  }
+
+  function alqClienteEditFormHtml(c) {
+    return `
+      <li class="item edit-item">
+        <div class="grid">
+          <div><label>Nombre</label><input type="text" id="editac-nombre-${c.id}" value="${esc(c.nombre)}"></div>
+          <div><label>Teléfono</label><input type="tel" id="editac-telefono-${c.id}" value="${esc(c.telefono)}"></div>
+          <div><label>Zona que busca</label><input type="text" id="editac-zona-${c.id}" value="${esc(c.zona)}"></div>
+          <div><label>Tipo</label><select id="editac-tipo-${c.id}">${tipoOptionsHtml(c.tipo)}</select></div>
+          <div><label>Renta máx. (€/mes)</label><input type="number" id="editac-presupuesto-${c.id}" value="${c.presupuesto || ''}"></div>
+          <div class="full"><label>Qué busca</label><textarea id="editac-caract-${c.id}">${esc(c.caract)}</textarea></div>
+        </div>
+        <div class="form-footer">
+          <button class="ghost" data-cancelalqcliente="${c.id}">Cancelar</button>
+          <button class="primary" data-savealqcliente="${c.id}">Guardar</button>
+        </div>
+      </li>`;
+  }
+
+  function renderAlqClientes() {
+    const el = document.getElementById('list-alq-clientes');
+    if (!state.alquilerClientes.length) {
+      el.innerHTML = emptyState('Todavía no hay nadie buscando alquiler. Añade el primero.');
+      return;
+    }
+    el.innerHTML = '<ul class="list">' + state.alquilerClientes.map(c =>
+      c.id === editingAlqClienteId ? alqClienteEditFormHtml(c) : alqClienteRowHtml(c)
+    ).join('') + '</ul>';
+    bindDeletes(el);
+    el.querySelectorAll('[data-editalqcliente]').forEach(btn => {
+      btn.addEventListener('click', () => { editingAlqClienteId = btn.dataset.editalqcliente; renderAlqClientes(); });
+    });
+    el.querySelectorAll('[data-cancelalqcliente]').forEach(btn => {
+      btn.addEventListener('click', () => { editingAlqClienteId = null; renderAlqClientes(); });
+    });
+    el.querySelectorAll('[data-savealqcliente]').forEach(btn => {
+      btn.addEventListener('click', () => saveAlqCliente(btn.dataset.savealqcliente));
+    });
+  }
+
+  async function saveAlqCliente(id) {
+    const nombre = document.getElementById(`editac-nombre-${id}`).value.trim();
+    const telefono = document.getElementById(`editac-telefono-${id}`).value.trim();
+    if (!nombre || !telefono) { showToast('Nombre y teléfono son obligatorios'); return; }
+    const presupuestoVal = document.getElementById(`editac-presupuesto-${id}`).value;
+    const patch = {
+      nombre,
+      telefono,
+      zona: document.getElementById(`editac-zona-${id}`).value.trim(),
+      tipo: document.getElementById(`editac-tipo-${id}`).value,
+      presupuesto: presupuestoVal ? Number(presupuestoVal) : null,
+      caract: document.getElementById(`editac-caract-${id}`).value.trim(),
+    };
+    const { error } = await sb.from('alquiler_clientes').update(patch).eq('id', id);
+    if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
+    const c = state.alquilerClientes.find(x => x.id === id);
+    if (c) Object.assign(c, patch);
+    editingAlqClienteId = null;
+    renderAll();
+    showToast('Actualizado');
+  }
+
+  function renderAlqPisos() {
+    const el = document.getElementById('list-alq-pisos');
+    if (!state.alquilerPisos.length) {
+      el.innerHTML = emptyState('Todavía no hay pisos en alquiler registrados. Añade el primero.');
+      return;
+    }
+    el.innerHTML = '<ul class="list">' + state.alquilerPisos.map(p => `
+      <li class="item">
+        <div class="item-main">
+          <div class="item-name">${esc(p.zona)}${p.tipo ? ' · ' + esc(p.tipo) : ''}</div>
+          <div class="item-meta"><span class="num">${fmtMoney(p.precio)}</span>/mes</div>
+          ${p.caract ? `<div class="item-chars">${esc(p.caract)}</div>` : ''}
+          <div class="item-by">Añadido por ${esc(p.agente)} · ${fmtDate(p.fecha)}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" rel="noopener">Ver ficha</a>` : ''}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
+          <button class="ghost" data-editprecioalq="${p.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar renta</button>
+          <button class="del" data-list="alquilerPisos" data-table="alquiler_pisos" data-id="${p.id}">Eliminar</button>
+        </div>
+      </li>`).join('') + '</ul>';
+    bindDeletes(el);
+    el.querySelectorAll('[data-editprecioalq]').forEach(btn => {
+      btn.addEventListener('click', () => editPrecioAlquiler(btn.dataset.editprecioalq));
+    });
+  }
+
+  function renderMatchesAlquiler(matches) {
+    const el = document.getElementById('list-alq-matches');
+    if (!matches.length) {
+      el.innerHTML = emptyState('Sin coincidencias de alquiler por ahora.');
+      return;
+    }
+    const groups = groupMatches(matches);
+    el.innerHTML = groups.map(g => {
+      const restantes = g.all.length - g.top.length;
+      return `
+      <div class="match-group">
+        <div class="match-group-header">
+          <div>
+            <div class="match-group-name">${esc(g.comprador.nombre)}</div>
+            <div class="match-group-meta"><span class="num">${esc(g.comprador.telefono)}</span> · ${esc(g.comprador.zona) || 'cualquier zona'} · <span class="num">${fmtMoney(g.comprador.presupuesto)}</span>/mes</div>
+          </div>
+          <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="match-piso-list">${g.top.map(pisoLineHtml).join('')}</div>
+        ${restantes > 0 ? `<div class="match-piso-more">+${restantes} más — se incluirán en un próximo envío</div>` : ''}
+        <div class="match-group-actions">
+          <button class="primary" data-sendgroupalq="${g.comprador.id}">📲 Enviar WhatsApp (${g.top.length})</button>
+          <button class="ghost done" data-donegroupalq="${g.comprador.id}">Marcar como contactado</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    el.querySelectorAll('[data-sendgroupalq]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const g = groups.find(x => x.comprador.id === btn.dataset.sendgroupalq);
+        if (!g) return;
+        const msg = buildGroupMessage(g.comprador, g.top);
+        navigator.clipboard.writeText(msg).then(() => showToast('Mensaje copiado')).catch(() => {});
+        window.open(waLink(g.comprador.telefono, msg), '_blank');
+        markContactedBatchAlquiler(g.top.map(m => m.key));
+      });
+    });
+    el.querySelectorAll('[data-donegroupalq]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const g = groups.find(x => x.comprador.id === btn.dataset.donegroupalq);
+        if (!g) return;
+        markContactedBatchAlquiler(g.top.map(m => m.key));
+        showToast('Marcado como contactado');
+      });
     });
   }
 

@@ -245,3 +245,95 @@ values
   ('ip-2344-nuevo-360000-1a5f47', '2344', 'Tómbola - Rabasa', 'House Type Duplex', 360000, NULL, NULL, '4 hab · 2 baños · 228 m2 · ref. 2344 · https://www.inmoparadise.com/ficha/house-type-duplex/alicante/tombola-rabasa/10473/28345561/en/', 'Inmoparadise (auto)', 'nuevo', 'https://www.inmoparadise.com/ficha/house-type-duplex/alicante/tombola-rabasa/10473/28345561/en/', false, '2026-08-24T09:48:19.867576+00:00'),
   ('ip-2252-nuevo-305000-86a5af', '2252', 'Centro', 'Flat', 305000, NULL, NULL, '4 hab · 2 baños · 77 m2 · ref. 2252 · https://www.inmoparadise.com/ficha/flat/alicante/centro/10473/27412466/en/', 'Inmoparadise (auto)', 'nuevo', 'https://www.inmoparadise.com/ficha/flat/alicante/centro/10473/27412466/en/', false, '2026-08-24T09:48:19.867582+00:00')
 on conflict (id) do nothing;
+
+-- ============================================================
+-- Rol de comprador (comprador / vendedor / ambos) y notas internas
+-- ============================================================
+alter table public.compradores add column if not exists rol text not null default 'comprador';
+alter table public.compradores add column if not exists notas text;
+alter table public.compradores drop constraint if exists compradores_rol_check;
+alter table public.compradores add constraint compradores_rol_check check (rol in ('comprador', 'vendedor', 'ambos'));
+
+-- ============================================================
+-- Alquiler (independiente de Compradores/Pisos/Coincidencias)
+-- ============================================================
+-- Quien busca alquilar (alquiler_clientes) y los pisos en alquiler
+-- que se añaden a mano (alquiler_pisos — todavía no hay ninguna
+-- fuente automática, el scraper solo vigila venta). Mismas reglas de
+-- acceso que Compradores/Pisos: los clientes de alquiler solo los ve
+-- quien los creó (o un admin); los pisos en alquiler los ve y edita
+-- todo el equipo por igual.
+
+create table if not exists public.alquiler_clientes (
+  id text primary key,
+  nombre text not null,
+  telefono text not null,
+  zona text,
+  tipo text,
+  presupuesto numeric,
+  caract text,
+  agente text not null,
+  owner_id uuid references auth.users(id) default auth.uid(),
+  fecha timestamptz not null default now()
+);
+
+create table if not exists public.alquiler_pisos (
+  id text primary key,
+  zona text not null,
+  tipo text,
+  precio numeric,
+  caract text,
+  agente text,
+  url text,
+  fecha timestamptz not null default now()
+);
+
+create table if not exists public.alquiler_contactados (
+  match_key text primary key,
+  fecha timestamptz not null default now()
+);
+
+alter table public.alquiler_clientes enable row level security;
+alter table public.alquiler_pisos enable row level security;
+alter table public.alquiler_contactados enable row level security;
+
+drop policy if exists "alquiler_clientes_select" on public.alquiler_clientes;
+drop policy if exists "alquiler_clientes_insert" on public.alquiler_clientes;
+drop policy if exists "alquiler_clientes_update" on public.alquiler_clientes;
+drop policy if exists "alquiler_clientes_delete" on public.alquiler_clientes;
+
+create policy "alquiler_clientes_select" on public.alquiler_clientes
+  for select using (owner_id = auth.uid() or public.is_admin());
+
+create policy "alquiler_clientes_insert" on public.alquiler_clientes
+  for insert with check (owner_id = auth.uid());
+
+create policy "alquiler_clientes_update" on public.alquiler_clientes
+  for update using (owner_id = auth.uid() or public.is_admin())
+  with check (owner_id = auth.uid() or public.is_admin());
+
+create policy "alquiler_clientes_delete" on public.alquiler_clientes
+  for delete using (owner_id = auth.uid() or public.is_admin());
+
+-- El catálogo de pisos en alquiler lo ve y edita todo el equipo,
+-- igual que el de venta (por ahora se añaden siempre a mano).
+drop policy if exists "alquiler_pisos_all" on public.alquiler_pisos;
+create policy "alquiler_pisos_all" on public.alquiler_pisos
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
+drop policy if exists "alquiler_contactados_all" on public.alquiler_contactados;
+create policy "alquiler_contactados_all" on public.alquiler_contactados
+  for all using (auth.uid() is not null) with check (auth.uid() is not null);
+
+-- Mueve a Jose Luis (busca alquiler, no compra) de Compradores a Alquiler.
+insert into public.alquiler_clientes (id, nombre, telefono, zona, tipo, presupuesto, caract, agente, owner_id, fecha)
+select gen_random_uuid()::text, nombre, telefono, zona, tipo, presupuesto,
+       'Con urbanización', agente, owner_id, fecha
+from public.compradores
+where nombre = 'Jose Luis' and telefono = '601182032'
+on conflict (id) do nothing;
+
+delete from public.compradores where nombre = 'Jose Luis' and telefono = '601182032';
+
+-- Beatriz compra y también vende su casa en Río Park.
+update public.compradores set rol = 'ambos' where nombre = 'Beatriz' and telefono = '603655249';
