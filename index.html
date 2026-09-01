@@ -127,6 +127,27 @@
     padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
   }
   li.item.reserved-item { opacity: 0.6; background: var(--paper); }
+  .role-tag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
+  }
+  .role-comprador { background: var(--sea-bg); color: var(--sea); border: 1px solid #CFDFD8; }
+  .role-vendedor { background: var(--coral); color: #fff; }
+  .role-ambos { background: var(--accent); color: #fff; }
+  .subsection-title {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 15px; font-weight: 600; color: var(--ink); margin: 0 0 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .subsection-title .count {
+    font-family: inherit; font-size: 11px; font-weight: 700; color: var(--ink-soft);
+    background: var(--paper); border: 1px solid var(--line); border-radius: 20px; padding: 1px 8px;
+  }
+  .item-notes {
+    font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5;
+    background: #FBF9F4; border-left: 2px solid var(--accent); padding: 6px 9px; border-radius: 4px;
+  }
+  .item-notes strong { color: var(--ink); }
   li.item.edit-item { display: block; }
   li.item.edit-item .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
   li.item.edit-item .grid .full { grid-column: 1 / -1; }
@@ -276,6 +297,14 @@
         <div class="grid">
           <div><label>Nombre</label><input type="text" id="c-nombre" required placeholder="María López"></div>
           <div><label>Teléfono</label><input type="tel" id="c-telefono" required placeholder="612 345 678"></div>
+          <div>
+            <label>Es</label>
+            <select id="c-rol">
+              <option value="comprador" selected>Comprador</option>
+              <option value="vendedor">Vendedor</option>
+              <option value="ambos">Compra y vende</option>
+            </select>
+          </div>
           <div><label>Zona que busca</label><input type="text" id="c-zona" placeholder="Playa San Juan"></div>
           <div>
             <label>Tipo</label>
@@ -288,7 +317,7 @@
           <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="c-caract" placeholder="3 hab, terraza, cerca del cole, con ascensor..."></textarea></div>
         </div>
         <div class="form-footer">
-          <span class="hint">Los campos de zona, tipo y presupuesto se usan para buscar coincidencias.</span>
+          <span class="hint">Los campos de zona, tipo y presupuesto se usan para buscar coincidencias. Los vendedores puros no entran en las coincidencias como compradores.</span>
           <button type="submit" class="primary">Añadir comprador</button>
         </div>
       </form>
@@ -524,6 +553,7 @@
       id: uid(),
       nombre: document.getElementById('c-nombre').value.trim(),
       telefono: document.getElementById('c-telefono').value.trim(),
+      rol: document.getElementById('c-rol').value || 'comprador',
       zona: document.getElementById('c-zona').value.trim(),
       tipo: document.getElementById('c-tipo').value,
       presupuesto: document.getElementById('c-presupuesto').value ? Number(document.getElementById('c-presupuesto').value) : null,
@@ -584,6 +614,7 @@
     for (const piso of state.pisos) {
       if (piso.reservado) continue; // reservado: no se ofrece a compradores
       for (const comprador of state.compradores) {
+        if (comprador.rol === 'vendedor') continue; // vendedores puros no buscan piso
         const reasons = [];
         if (!zonaMatches(piso.zona, comprador.zona)) continue;
         reasons.push('Zona');
@@ -656,20 +687,55 @@
     ).join('');
   }
 
+  const ROL_OPCIONES = [
+    { value: 'comprador', label: 'Comprador' },
+    { value: 'vendedor', label: 'Vendedor' },
+    { value: 'ambos', label: 'Compra y vende' },
+  ];
+  function rolOptionsHtml(selected) {
+    return ROL_OPCIONES.map(o =>
+      `<option value="${o.value}"${o.value === (selected || 'comprador') ? ' selected' : ''}>${o.label}</option>`
+    ).join('');
+  }
+  function rolTagHtml(rol) {
+    if (rol === 'vendedor') return '<span class="role-tag role-vendedor">Vendedor</span>';
+    if (rol === 'ambos') return '<span class="role-tag role-ambos">Compra y vende</span>';
+    return '<span class="role-tag role-comprador">Comprador</span>';
+  }
+
   function renderCompradorEditForm(c) {
     return `
       <li class="item edit-item">
         <div class="grid">
           <div><label>Nombre</label><input type="text" id="edit-nombre-${c.id}" value="${esc(c.nombre)}"></div>
           <div><label>Teléfono</label><input type="tel" id="edit-telefono-${c.id}" value="${esc(c.telefono)}"></div>
+          <div><label>Es</label><select id="edit-rol-${c.id}">${rolOptionsHtml(c.rol)}</select></div>
           <div><label>Zona que busca</label><input type="text" id="edit-zona-${c.id}" value="${esc(c.zona)}"></div>
           <div><label>Tipo</label><select id="edit-tipo-${c.id}">${tipoOptionsHtml(c.tipo)}</select></div>
           <div><label>Presupuesto máx. (€)</label><input type="number" id="edit-presupuesto-${c.id}" value="${c.presupuesto || ''}"></div>
           <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="edit-caract-${c.id}">${esc(c.caract)}</textarea></div>
+          <div class="full"><label>Notas</label><textarea id="edit-notas-${c.id}" placeholder="Anotaciones internas: qué vende, condiciones, avisos...">${esc(c.notas)}</textarea></div>
         </div>
         <div class="form-footer">
           <button class="ghost" data-cancelcomprador="${c.id}">Cancelar</button>
           <button class="primary" data-savecomprador="${c.id}">Guardar</button>
+        </div>
+      </li>`;
+  }
+
+  function compradorRowHtml(c) {
+    return `
+      <li class="item">
+        <div class="item-main">
+          <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}</div>
+          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span></div>
+          ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
+          ${c.notas ? `<div class="item-notes"><strong>Notas:</strong> ${esc(c.notas)}</div>` : ''}
+          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
+          <button class="ghost" data-editcomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
+          <button class="del" data-list="compradores" data-table="compradores" data-id="${c.id}">Eliminar</button>
         </div>
       </li>`;
   }
@@ -680,22 +746,15 @@
       el.innerHTML = emptyState('Todavía no hay compradores en la lista. Añade el primero para empezar a encontrarles piso.');
       return;
     }
-    el.innerHTML = '<ul class="list">' + state.compradores.map(c => {
-      if (c.id === editingCompradorId) return renderCompradorEditForm(c);
+    const vendedores = state.compradores.filter(c => c.rol === 'vendedor' || c.rol === 'ambos');
+    const compradores = state.compradores.filter(c => c.rol !== 'vendedor' && c.rol !== 'ambos');
+    const seccion = (titulo, lista) => {
+      if (!lista.length) return '';
       return `
-      <li class="item">
-        <div class="item-main">
-          <div class="item-name">${esc(c.nombre)}</div>
-          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span></div>
-          ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
-          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
-          <button class="ghost" data-editcomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
-          <button class="del" data-list="compradores" data-table="compradores" data-id="${c.id}">Eliminar</button>
-        </div>
-      </li>`;
-    }).join('') + '</ul>';
+        <div class="subsection-title">${titulo} <span class="count">${lista.length}</span></div>
+        <ul class="list">${lista.map(c => c.id === editingCompradorId ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('')}</ul>`;
+    };
+    el.innerHTML = seccion('Vende', vendedores) + seccion('Compra', compradores);
     bindDeletes(el);
     el.querySelectorAll('[data-editcomprador]').forEach(btn => {
       btn.addEventListener('click', () => { editingCompradorId = btn.dataset.editcomprador; renderCompradores(); });
@@ -716,10 +775,12 @@
     const patch = {
       nombre,
       telefono,
+      rol: document.getElementById(`edit-rol-${id}`).value || 'comprador',
       zona: document.getElementById(`edit-zona-${id}`).value.trim(),
       tipo: document.getElementById(`edit-tipo-${id}`).value,
       presupuesto: presupuestoVal ? Number(presupuestoVal) : null,
       caract: document.getElementById(`edit-caract-${id}`).value.trim(),
+      notas: document.getElementById(`edit-notas-${id}`).value.trim(),
     };
     const { error } = await sb.from('compradores').update(patch).eq('id', id);
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
@@ -747,7 +808,7 @@
           <div class="item-by">${esDeWeb ? 'Detectado en la web' : 'Añadido por ' + esc(p.agente)} · ${fmtDate(p.fecha)}${p.url ? ` · <a href="${esc(p.url)}" target="_blank" rel="noopener">Ver ficha</a>` : ''}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
-          <button class="ghost" data-editprecio="${p.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar precio</button>
+          ${esDeWeb ? '' : `<button class="ghost" data-editprecio="${p.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar precio</button>`}
           <button class="del" data-list="pisos" data-table="pisos" data-id="${p.id}">Eliminar</button>
         </div>
       </li>`;
