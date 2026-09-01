@@ -193,6 +193,24 @@
     padding: 2px 7px; border-radius: 9px; border: 1px solid #CFDFD8;
   }
   .match-actions { display: flex; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid var(--line); background: #FBF9F4; }
+
+  .match-group { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin-bottom: 14px; overflow: hidden; }
+  .match-group-header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .match-group-name { font-weight: 700; font-size: 14px; }
+  .match-group-meta { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+  .match-group-count {
+    font-size: 11px; font-weight: 700; color: #fff; background: var(--accent);
+    padding: 2px 8px; border-radius: 10px; flex: none; white-space: nowrap; margin-top: 1px;
+  }
+  .match-piso-list { padding: 2px 16px; }
+  .match-piso-row { padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .match-piso-row:last-child { border-bottom: none; }
+  .match-piso-row .piso-line1 { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+  .match-piso-row .piso-chars { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+  .match-piso-row .piso-chars a { color: var(--sea); }
+  .match-piso-more { padding: 4px 16px 8px; font-size: 12px; color: var(--ink-soft); font-style: italic; }
+  .match-group-actions { display: flex; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid var(--line); background: #FBF9F4; }
+  .match-group-actions button.primary { font-size: 12.5px; padding: 6px 12px; border-radius: 6px; }
   button.ghost {
     appearance: none; cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600;
     border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 6px 12px; border-radius: 6px;
@@ -705,6 +723,32 @@
     return matches;
   }
 
+  const MAX_PISOS_POR_MENSAJE = 4;
+
+  function groupMatches(matches) {
+    const map = new Map();
+    for (const m of matches) {
+      if (!map.has(m.comprador.id)) map.set(m.comprador.id, []);
+      map.get(m.comprador.id).push(m);
+    }
+    const groups = Array.from(map.values()).map(list => {
+      list.sort((a, b) => new Date(b.piso.fecha || 0) - new Date(a.piso.fecha || 0));
+      return { comprador: list[0].comprador, all: list, top: list.slice(0, MAX_PISOS_POR_MENSAJE) };
+    });
+    groups.sort((a, b) => a.comprador.nombre.localeCompare(b.comprador.nombre, 'es'));
+    return groups;
+  }
+
+  function pisoLineHtml(m) {
+    const p = m.piso;
+    return `
+      <div class="match-piso-row">
+        <div class="piso-line1"><span>${esc(p.zona)}${p.tipo ? ' · ' + esc(p.tipo) : ''}</span><span class="num">${fmtMoney(p.precio)}</span></div>
+        ${p.caract ? `<div class="piso-chars">${esc((p.caract.split('\n')[0] || '').slice(0, 90))}</div>` : ''}
+        ${p.url ? `<div class="piso-chars"><a href="${esc(p.url)}" target="_blank" rel="noopener">Ver ficha</a></div>` : ''}
+      </div>`;
+  }
+
   function buildMessage(comprador, piso) {
     let msg = `Hola ${comprador.nombre}, soy de Inmoparadise. Ha entrado un piso en ${piso.zona}`;
     if (piso.tipo) msg += ` (${piso.tipo.toLowerCase()})`;
@@ -715,6 +759,19 @@
     return msg;
   }
 
+  function buildGroupMessage(comprador, list) {
+    let msg = `Hola ${comprador.nombre}, soy de Inmoparadise. Tenemos estas viviendas que encajan con lo que buscas:\n\n`;
+    list.forEach((m, i) => {
+      const p = m.piso;
+      msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}\n`;
+      if (p.caract) msg += `${(p.caract.split('\n')[0] || '').slice(0, 90)}\n`;
+      if (p.url) msg += `${p.url}\n`;
+      msg += '\n';
+    });
+    msg += '¿Te paso más info o te viene bien ver alguna?';
+    return msg;
+  }
+
   async function markContacted(key) {
     const fecha = new Date().toISOString();
     const { error } = await sb.from('contactados').upsert({ match_key: key, fecha });
@@ -722,6 +779,15 @@
     state.contactados[key] = fecha;
     renderAll();
     showToast('Marcado como contactado');
+  }
+
+  async function markContactedBatch(keys) {
+    if (!keys.length) return;
+    const fecha = new Date().toISOString();
+    const { error } = await sb.from('contactados').upsert(keys.map(key => ({ match_key: key, fecha })));
+    if (error) { console.error(error); showToast('No se pudo guardar'); return; }
+    keys.forEach(key => { state.contactados[key] = fecha; });
+    renderAll();
   }
 
   async function editPrecio(id) {
@@ -906,55 +972,44 @@
       el.innerHTML = emptyState('Sin coincidencias por ahora. En cuanto un piso nuevo encaje con un comprador, aparecerá aquí.');
       return;
     }
-    el.innerHTML = matches.map(m => {
-      const isOpen = m.key === expandedMatchKey;
+    const groups = groupMatches(matches);
+    el.innerHTML = groups.map(g => {
+      const restantes = g.all.length - g.top.length;
       return `
-      <div class="match-card${isOpen ? ' expanded' : ''}">
-        <button type="button" class="match-row" data-toggle="${m.key}">
-          <span class="match-row-text"><strong>${esc(m.comprador.nombre)}</strong> coincide con ${esc(m.piso.zona)}${m.piso.tipo ? ' · ' + esc(m.piso.tipo) : ''}</span>
-          <span class="match-row-price num">${fmtMoney(m.piso.precio)}</span>
-          <svg class="match-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </button>
-        ${isOpen ? `
-        <div class="match-body">
-          <div class="match-side buyer">
-            <div class="match-label">Comprador</div>
-            <div class="item-name">${esc(m.comprador.nombre)}</div>
-            <div class="item-meta"><span class="num">${esc(m.comprador.telefono)}</span></div>
-            <div class="item-meta">${esc(m.comprador.zona) || 'cualquier zona'} · <span class="num">${fmtMoney(m.comprador.presupuesto)}</span></div>
+      <div class="match-group">
+        <div class="match-group-header">
+          <div>
+            <div class="match-group-name">${esc(g.comprador.nombre)}</div>
+            <div class="match-group-meta"><span class="num">${esc(g.comprador.telefono)}</span> · ${esc(g.comprador.zona) || 'cualquier zona'} · <span class="num">${fmtMoney(g.comprador.presupuesto)}</span></div>
           </div>
-          <div class="match-stamp"><div class="stamp">Encaja</div></div>
-          <div class="match-side">
-            <div class="match-label">Piso</div>
-            <div class="item-name">${esc(m.piso.zona)}${m.piso.tipo ? ' · ' + esc(m.piso.tipo) : ''}</div>
-            <div class="item-meta"><span class="num">${fmtMoney(m.piso.precio)}</span></div>
-            <div class="reasons">${m.reasons.map(r => `<span class="reason-chip">${r}</span>`).join('')}</div>
-          </div>
+          <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}</span>
         </div>
-        <div class="match-actions">
-          <button class="ghost" data-copy="${m.key}">Copiar mensaje</button>
-          <button class="ghost done" data-done="${m.key}">Marcar contactado</button>
-        </div>` : ''}
+        <div class="match-piso-list">${g.top.map(pisoLineHtml).join('')}</div>
+        ${restantes > 0 ? `<div class="match-piso-more">+${restantes} más — se incluirán en un próximo envío</div>` : ''}
+        <div class="match-group-actions">
+          <button class="primary" data-sendgroup="${g.comprador.id}">📲 Enviar WhatsApp (${g.top.length})</button>
+          <button class="ghost done" data-donegroup="${g.comprador.id}">Marcar como contactado</button>
+        </div>
       </div>`;
     }).join('');
 
-    el.querySelectorAll('[data-toggle]').forEach(btn => {
+    el.querySelectorAll('[data-sendgroup]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const key = btn.dataset.toggle;
-        expandedMatchKey = expandedMatchKey === key ? null : key;
-        renderAll();
+        const g = groups.find(x => x.comprador.id === btn.dataset.sendgroup);
+        if (!g) return;
+        const msg = buildGroupMessage(g.comprador, g.top);
+        navigator.clipboard.writeText(msg).then(() => showToast('Mensaje copiado')).catch(() => {});
+        window.open(waLink(g.comprador.telefono, msg), '_blank');
+        markContactedBatch(g.top.map(m => m.key));
       });
     });
-    el.querySelectorAll('[data-copy]').forEach(btn => {
+    el.querySelectorAll('[data-donegroup]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const m = matches.find(x => x.key === btn.dataset.copy);
-        const msg = buildMessage(m.comprador, m.piso);
-        navigator.clipboard.writeText(msg).then(() => showToast('Mensaje copiado')).catch(() => showToast('No se pudo copiar'));
-        window.open(waLink(m.comprador.telefono, msg), '_blank');
+        const g = groups.find(x => x.comprador.id === btn.dataset.donegroup);
+        if (!g) return;
+        markContactedBatch(g.top.map(m => m.key));
+        showToast('Marcado como contactado');
       });
-    });
-    el.querySelectorAll('[data-done]').forEach(btn => {
-      btn.addEventListener('click', () => markContacted(btn.dataset.done));
     });
   }
 
