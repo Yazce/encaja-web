@@ -108,6 +108,15 @@
   }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   textarea { resize: vertical; min-height: 44px; }
+  .pw-field { position: relative; }
+  .pw-field input { padding-right: 36px; }
+  .pw-toggle {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; padding: 5px;
+    color: var(--ink-soft); display: flex; align-items: center; justify-content: center;
+  }
+  .pw-toggle:hover { color: var(--ink); }
+  .pw-toggle svg { width: 18px; height: 18px; }
   .form-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
   .hint { font-size: 12px; color: var(--ink-soft); }
   button.primary {
@@ -298,7 +307,14 @@
     <p class="auth-sub">Inicia sesión con la cuenta que te haya dado el equipo.</p>
     <form id="form-login">
       <div><label>Usuario</label><input type="text" id="login-username" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
-      <div><label>Contraseña</label><input type="password" id="login-password" required autocomplete="current-password"></div>
+      <div><label>Contraseña</label>
+        <div class="pw-field">
+          <input type="password" id="login-password" required autocomplete="current-password">
+          <button type="button" class="pw-toggle" id="toggle-login-password" tabindex="-1" aria-label="Mostrar contraseña">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
       <div id="login-error" class="auth-error" style="display:none;"></div>
       <button type="submit" class="primary">Entrar</button>
     </form>
@@ -851,6 +867,21 @@
     document.getElementById('login-password').value = '';
   });
 
+  // Botón del ojito para ver/ocultar la contraseña mientras se escribe.
+  (function setupPasswordToggle() {
+    const input = document.getElementById('login-password');
+    const btn = document.getElementById('toggle-login-password');
+    if (!input || !btn) return;
+    const eyeOpen = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const eyeClosed = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.6 18.6 0 0 1 4.22-5.06M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 7 11 7a18.6 18.6 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>';
+    btn.addEventListener('click', () => {
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      btn.innerHTML = showing ? eyeOpen : eyeClosed;
+      btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+    });
+  })();
+
   document.getElementById('btn-logout').addEventListener('click', async () => {
     await sb.auth.signOut();
   });
@@ -1042,12 +1073,26 @@
     return groups;
   }
 
+  // El caract de cada piso viene del scraper con la URL ya pegada al final
+  // (para el uso interno de Encaja). Antes de mostrarlo o mandarlo por
+  // WhatsApp hay que quitar esa URL de ahí: si no, al recortar el texto a
+  // un tamaño razonable se parte el enlace por la mitad, sale un enlace
+  // roto y WhatsApp deja de generar la vista previa con la fotito.
+  function caractSinUrl(p) {
+    let c = (p.caract || '').split('\n')[0] || '';
+    if (p.url && c.includes(p.url)) {
+      c = c.split(p.url).join('').trim().replace(/\s*·\s*$/, '');
+    }
+    return c;
+  }
+
   function pisoLineHtml(m) {
     const p = m.piso;
+    const chars = caractSinUrl(p);
     return `
       <div class="match-piso-row">
         <div class="piso-line1"><span>${esc(p.zona)}${p.tipo ? ' · ' + esc(p.tipo) : ''}</span><span class="num">${fmtMoney(p.precio)}</span></div>
-        ${p.caract ? `<div class="piso-chars">${esc((p.caract.split('\n')[0] || '').slice(0, 90))}</div>` : ''}
+        ${chars ? `<div class="piso-chars">${esc(chars.slice(0, 90))}</div>` : ''}
         ${p.url ? `<div class="piso-chars"><a href="${esc(p.url)}" target="_blank" rel="noopener">Ver ficha</a></div>` : ''}
       </div>`;
   }
@@ -1057,8 +1102,10 @@
     if (piso.tipo) msg += ` (${piso.tipo.toLowerCase()})`;
     msg += ` que puede encajar con lo que buscas`;
     if (piso.precio) msg += `: ${fmtMoney(piso.precio)}`;
-    if (piso.caract) msg += `. ${piso.caract}`;
-    msg += `. ¿Te paso más info o te viene bien verlo?`;
+    const chars = caractSinUrl(piso);
+    if (chars) msg += `. ${chars}`;
+    if (piso.url) msg += `\n${piso.url}`;
+    msg += `\n¿Te paso más info o te viene bien verlo?`;
     return msg;
   }
 
@@ -1067,7 +1114,8 @@
     list.forEach((m, i) => {
       const p = m.piso;
       msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}\n`;
-      if (p.caract) msg += `${(p.caract.split('\n')[0] || '').slice(0, 90)}\n`;
+      const chars = caractSinUrl(p);
+      if (chars) msg += `${chars.slice(0, 90)}\n`;
       if (p.url) msg += `${p.url}\n`;
       msg += '\n';
     });
