@@ -175,7 +175,7 @@
     padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
   }
   li.item.reserved-item { opacity: 0.6; background: var(--paper); }
-  li.item.highlight-target { animation: highlightPulse 2.4s ease-out 1; }
+  li.item.highlight-target, .match-group.highlight-target { animation: highlightPulse 2.4s ease-out 1; }
   @keyframes highlightPulse {
     0% { box-shadow: 0 0 0 3px var(--accent); background: #FFF6E0; }
     100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
@@ -871,9 +871,12 @@
     abrirCompradorDesdeEnlace();
   }
 
-  // Si se ha entrado desde el aviso push de una coincidencia (que ahora
-  // manda "/?comprador=<id>"), abre directamente la pestaña de Compradores
-  // y resalta ese comprador en vez de dejar solo la portada de la app.
+  // Si se ha entrado desde el aviso push de una coincidencia (que manda
+  // "/?comprador=<id>"), abre directamente la pestaña de Coincidencias y
+  // resalta la coincidencia de ese comprador, para poder copiar y pegar el
+  // texto de WhatsApp al momento, sin tener que buscarlo. Si ya no tiene
+  // coincidencias activas (por ejemplo, si ya se marcó como contactado),
+  // se lleva en su lugar a su ficha en Compradores.
   let compradorDesdeEnlaceAbierto = false;
   function abrirCompradorDesdeEnlace() {
     if (compradorDesdeEnlaceAbierto) return;
@@ -882,13 +885,24 @@
     const existe = state.compradores.some(c => c.id === id);
     if (!existe) return;
     compradorDesdeEnlaceAbierto = true;
-    document.querySelector('nav.tabs button[data-tab="compradores"]')?.click();
+    document.querySelector('nav.tabs button[data-tab="matches"]')?.click();
     setTimeout(() => {
-      const li = document.getElementById(`comprador-${id}`);
-      if (!li) return;
-      li.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      li.classList.add('highlight-target');
-      setTimeout(() => li.classList.remove('highlight-target'), 2500);
+      const grupo = document.getElementById(`match-group-${id}`);
+      if (grupo) {
+        grupo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        grupo.classList.add('highlight-target');
+        setTimeout(() => grupo.classList.remove('highlight-target'), 2500);
+        return;
+      }
+      // Sin coincidencia activa: llevamos a su ficha en Compradores en su lugar.
+      document.querySelector('nav.tabs button[data-tab="compradores"]')?.click();
+      setTimeout(() => {
+        const li = document.getElementById(`comprador-${id}`);
+        if (!li) return;
+        li.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        li.classList.add('highlight-target');
+        setTimeout(() => li.classList.remove('highlight-target'), 2500);
+      }, 150);
     }, 150);
   }
 
@@ -1764,7 +1778,7 @@
     el.innerHTML = groups.map(g => {
       const restantes = g.all.length - g.top.length;
       return `
-      <div class="match-group">
+      <div class="match-group" id="match-group-${g.comprador.id}">
         <div class="match-group-header">
           <div>
             <div class="match-group-name">${esc(g.comprador.nombre)}</div>
