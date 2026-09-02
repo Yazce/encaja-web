@@ -20,6 +20,8 @@
 <div id="out">Cargando...</div>
 <button id="btnLocal">Probar notificación LOCAL (sin internet)</button>
 <div id="localResult"></div>
+<button id="btnUnsub">🔄 Renovar suscripción (borrar la vieja y crear una nueva)</button>
+<div id="unsubResult"></div>
 
 <script>
 const out = document.getElementById('out');
@@ -84,8 +86,32 @@ document.getElementById('btnLocal').addEventListener('click', async () => {
       new Notification('Prueba LOCAL de Encaja', { body: 'Si ves esto, tu móvil SÍ puede mostrar notificaciones.' });
     }
     r.innerHTML = '<div class="row ok">Notificación local enviada. Mira arriba en la pantalla / desliza desde arriba.</div>';
+    await new Promise(res => setTimeout(res, 800));
+    const reg2 = await navigator.serviceWorker.getRegistration();
+    if (reg2) {
+      const active = await reg2.getNotifications();
+      r.innerHTML += '<div class="row ' + (active.length ? 'ok' : 'warn') + '">El navegador dice que hay ' + active.length + ' notificación(es) activa(s) ahora mismo mostrándose.</div>';
+    }
   } catch (e) {
     r.innerHTML = '<div class="row bad">Error al mostrar: ' + e.message + '</div>';
+  }
+});
+
+document.getElementById('btnUnsub').addEventListener('click', async () => {
+  const r = document.getElementById('unsubResult');
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) { r.innerHTML = '<div class="row bad">No hay Service Worker registrado.</div>'; return; }
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await sub.unsubscribe();
+      r.innerHTML = '<div class="row ok">Suscripción vieja borrada.</div>';
+    } else {
+      r.innerHTML = '<div class="row warn">No había ninguna suscripción guardada.</div>';
+    }
+    r.innerHTML += '<div class="row">Ahora ve a la app de Encaja (no esta página) y pulsa el botón "🔔 Activar avisos" otra vez para crear una nueva.</div>';
+  } catch (e) {
+    r.innerHTML = '<div class="row bad">Error: ' + e.message + '</div>';
   }
 });
 </script>
