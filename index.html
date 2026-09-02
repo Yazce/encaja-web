@@ -195,6 +195,7 @@
   .estado-en_visita { background: #FFF1C8; color: #8A6A00; border: 1px solid #F0DD98; }
   .estado-descartado { background: #EFEFEF; color: #777; border: 1px solid #DDD; }
   .estado-cerrado { background: var(--accent); color: #fff; }
+  .estado-sin_revisar { background: #E6EEFC; color: #2255A4; border: 1px solid #C7D9F4; }
   .subsection-title {
     font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
     font-size: 15px; font-weight: 600; color: var(--ink); margin: 0 0 10px;
@@ -418,6 +419,7 @@
     </div>
     <div style="height:20px"></div>
     <h2 class="section-title">Lista de compradores</h2>
+    <input type="text" id="compradores-filtro" placeholder="Buscar por nombre, teléfono, zona..." style="margin-bottom:12px;">
     <div id="list-compradores"><div class="loading">Cargando…</div></div>
   </section>
 
@@ -498,6 +500,7 @@
       </div>
       <div style="height:20px"></div>
       <h2 class="section-title">Buscan alquiler</h2>
+      <input type="text" id="alq-clientes-filtro" placeholder="Buscar por nombre, teléfono, zona..." style="margin-bottom:12px;">
       <div id="list-alq-clientes"><div class="loading">Cargando…</div></div>
     </div>
 
@@ -567,6 +570,7 @@
   const state = {
     compradores: [], pisos: [], contactados: {},
     alquilerClientes: [], alquilerPisos: [], alquilerContactados: {},
+    perfiles: [],
   };
   let currentUser = null;
   let currentProfile = null;
@@ -574,6 +578,8 @@
   let editingCompradorId = null;
   let editingAlqClienteId = null;
   let pisosFiltroText = '';
+  let compradoresFiltroText = '';
+  let alqClientesFiltroText = '';
   let expandedMatchKey = null;
 
   // ---- Avisos de coincidencias nuevas (notificación del navegador) ----
@@ -930,6 +936,16 @@
     return data;
   }
 
+  // Lista de agentes para poder reasignar de quién es cada comprador/cliente
+  // (por ejemplo tras una importación masiva). Si no es admin, la política
+  // de la base de datos puede devolver solo su propio perfil, lo cual no
+  // pasa nada: simplemente no verá el selector de "otros" agentes.
+  async function loadPerfiles() {
+    const { data, error } = await sb.from('perfiles').select('id, nombre').order('nombre');
+    if (error) { console.error('Error cargando perfiles', error); state.perfiles = []; return; }
+    state.perfiles = data || [];
+  }
+
   function renderUserBar() {
     const el = document.getElementById('user-info');
     const nombre = currentAgentName();
@@ -958,6 +974,7 @@
   async function onSignedIn(session) {
     currentUser = session.user;
     currentProfile = await loadProfile(session.user);
+    if (currentProfile && currentProfile.is_admin) await loadPerfiles();
     renderUserBar();
     showAppScreen();
     updateNotifButton();
@@ -1046,6 +1063,16 @@
   document.getElementById('pisos-filtro').addEventListener('input', (e) => {
     pisosFiltroText = e.target.value;
     renderPisos();
+  });
+
+  document.getElementById('compradores-filtro').addEventListener('input', (e) => {
+    compradoresFiltroText = e.target.value;
+    renderCompradores();
+  });
+
+  document.getElementById('alq-clientes-filtro').addEventListener('input', (e) => {
+    alqClientesFiltroText = e.target.value;
+    renderAlqClientes();
   });
 
   document.getElementById('form-comprador').addEventListener('submit', async (e) => {
@@ -1168,7 +1195,7 @@
       if (piso.reservado) continue; // reservado: no se ofrece a compradores
       for (const comprador of state.compradores) {
         if (comprador.rol === 'vendedor') continue; // vendedores puros no buscan piso
-        if (comprador.estado === 'descartado' || comprador.estado === 'cerrado') continue;
+        if (comprador.estado === 'descartado' || comprador.estado === 'cerrado' || comprador.estado === 'sin_revisar') continue;
         const reasons = [];
         if (!zonaMatches(piso.zona, comprador.zona)) continue;
         reasons.push('Zona');
@@ -1194,7 +1221,7 @@
     const matches = [];
     for (const piso of state.alquilerPisos) {
       for (const cliente of state.alquilerClientes) {
-        if (cliente.estado === 'descartado' || cliente.estado === 'cerrado') continue;
+        if (cliente.estado === 'descartado' || cliente.estado === 'cerrado' || cliente.estado === 'sin_revisar') continue;
         const reasons = [];
         if (!zonaMatches(piso.zona, cliente.zona)) continue;
         reasons.push('Zona');
@@ -1415,6 +1442,7 @@
 
   const ESTADO_OPCIONES = [
     { value: 'activo', label: 'Activo' },
+    { value: 'sin_revisar', label: 'Sin revisar' },
     { value: 'en_visita', label: 'En visita' },
     { value: 'descartado', label: 'Descartado' },
     { value: 'cerrado', label: 'Cerrado' },
@@ -1429,6 +1457,17 @@
     return `<span class="estado-tag estado-${o.value}">${o.label}</span>`;
   }
 
+  // Selector de "de quién es" (solo lo ven las administradoras): permite
+  // reasignar el owner_id de un comprador/cliente a otro agente, por
+  // ejemplo tras una importación masiva de contactos.
+  function agenteSelectorHtml(idAttr, ownerId) {
+    if (!currentProfile || !currentProfile.is_admin || !state.perfiles.length) return '';
+    const opciones = state.perfiles.map(p =>
+      `<option value="${esc(p.id)}"${p.id === ownerId ? ' selected' : ''}>${esc(p.nombre)}</option>`
+    ).join('');
+    return `<div><label>De quién es</label><select id="${idAttr}">${opciones}</select></div>`;
+  }
+
   function renderCompradorEditForm(c) {
     return `
       <li class="item edit-item">
@@ -1437,6 +1476,7 @@
           <div><label>Teléfono</label><input type="tel" id="edit-telefono-${c.id}" value="${esc(c.telefono)}"></div>
           <div><label>Es</label><select id="edit-rol-${c.id}">${rolOptionsHtml(c.rol)}</select></div>
           <div><label>Estado</label><select id="edit-estado-${c.id}">${estadoOptionsHtml(c.estado)}</select></div>
+          ${agenteSelectorHtml(`edit-owner-${c.id}`, c.owner_id)}
           <div class="full">
             <label>Zona(s) que busca</label>
             <div class="zona-picker" id="edit-zona-picker-${c.id}"></div>
@@ -1479,15 +1519,22 @@
       el.innerHTML = emptyState('Todavía no hay compradores en la lista. Añade el primero para empezar a encontrarles piso.');
       return;
     }
-    const vendedores = state.compradores.filter(c => c.rol === 'vendedor' || c.rol === 'ambos');
-    const compradores = state.compradores.filter(c => c.rol !== 'vendedor' && c.rol !== 'ambos');
+    const textoFiltro = norm(compradoresFiltroText);
+    const visibles = state.compradores.filter(c => personaMatchesFiltro(c, textoFiltro));
+    if (!visibles.length) {
+      el.innerHTML = emptyState('Nadie coincide con la búsqueda.');
+      return;
+    }
+    const vendedores = visibles.filter(c => c.rol === 'vendedor' || c.rol === 'ambos');
+    const compradores = visibles.filter(c => c.rol !== 'vendedor' && c.rol !== 'ambos');
     const seccion = (titulo, lista) => {
       if (!lista.length) return '';
       return `
         <div class="subsection-title">${titulo} <span class="count">${lista.length}</span></div>
         <ul class="list">${lista.map(c => c.id === editingCompradorId ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('')}</ul>`;
     };
-    el.innerHTML = seccion('Vende', vendedores) + seccion('Compra', compradores);
+    el.innerHTML = (textoFiltro ? `<div class="hint" style="margin-bottom:8px;">${visibles.length} de ${state.compradores.length}</div>` : '') +
+      seccion('Vende', vendedores) + seccion('Compra', compradores);
     if (editingCompradorId) {
       const c = state.compradores.find(x => x.id === editingCompradorId);
       if (c) fillZonaPicker(`edit-zona-picker-${c.id}`, `edit-zona-otra-${c.id}`, c.zona);
@@ -1524,6 +1571,11 @@
       caract: document.getElementById(`edit-caract-${id}`).value.trim(),
       notas: document.getElementById(`edit-notas-${id}`).value.trim(),
     };
+    const ownerSel = document.getElementById(`edit-owner-${id}`);
+    if (ownerSel) {
+      const perfil = state.perfiles.find(p => p.id === ownerSel.value);
+      if (perfil) { patch.owner_id = perfil.id; patch.agente = perfil.nombre; }
+    }
     const { error } = await sb.from('compradores').update(patch).eq('id', id);
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     const c = state.compradores.find(x => x.id === id);
@@ -1546,6 +1598,12 @@
   function pisoMatchesFiltro(p, textoFiltro) {
     if (!textoFiltro) return true;
     const haystack = norm([p.zona, p.tipo, p.caract].filter(Boolean).join(' '));
+    return textoFiltro.split(/\s+/).filter(Boolean).every(w => haystack.includes(w));
+  }
+
+  function personaMatchesFiltro(c, textoFiltro) {
+    if (!textoFiltro) return true;
+    const haystack = norm([c.nombre, c.telefono, c.zona, c.tipo, c.caract, c.notas].filter(Boolean).join(' '));
     return textoFiltro.split(/\s+/).filter(Boolean).every(w => haystack.includes(w));
   }
 
@@ -1609,6 +1667,7 @@
           <div><label>Nombre</label><input type="text" id="editac-nombre-${c.id}" value="${esc(c.nombre)}"></div>
           <div><label>Teléfono</label><input type="tel" id="editac-telefono-${c.id}" value="${esc(c.telefono)}"></div>
           <div><label>Estado</label><select id="editac-estado-${c.id}">${estadoOptionsHtml(c.estado)}</select></div>
+          ${agenteSelectorHtml(`editac-owner-${c.id}`, c.owner_id)}
           <div class="full">
             <label>Zona(s) que busca</label>
             <div class="zona-picker" id="editac-zona-picker-${c.id}"></div>
@@ -1632,7 +1691,14 @@
       el.innerHTML = emptyState('Todavía no hay nadie buscando alquiler. Añade el primero.');
       return;
     }
-    el.innerHTML = '<ul class="list">' + state.alquilerClientes.map(c =>
+    const textoFiltro = norm(alqClientesFiltroText);
+    const visibles = state.alquilerClientes.filter(c => personaMatchesFiltro(c, textoFiltro));
+    if (!visibles.length) {
+      el.innerHTML = emptyState('Nadie coincide con la búsqueda.');
+      return;
+    }
+    el.innerHTML = (textoFiltro ? `<div class="hint" style="margin-bottom:8px;">${visibles.length} de ${state.alquilerClientes.length}</div>` : '') +
+      '<ul class="list">' + visibles.map(c =>
       c.id === editingAlqClienteId ? alqClienteEditFormHtml(c) : alqClienteRowHtml(c)
     ).join('') + '</ul>';
     if (editingAlqClienteId) {
@@ -1669,6 +1735,11 @@
       habitaciones_min: (() => { const v = document.getElementById(`editac-habitaciones-min-${id}`).value; return v ? Number(v) : null; })(),
       caract: document.getElementById(`editac-caract-${id}`).value.trim(),
     };
+    const ownerSel = document.getElementById(`editac-owner-${id}`);
+    if (ownerSel) {
+      const perfil = state.perfiles.find(p => p.id === ownerSel.value);
+      if (perfil) { patch.owner_id = perfil.id; patch.agente = perfil.nombre; }
+    }
     const { error } = await sb.from('alquiler_clientes').update(patch).eq('id', id);
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     const c = state.alquilerClientes.find(x => x.id === id);
