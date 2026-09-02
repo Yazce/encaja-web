@@ -540,6 +540,52 @@
   function notifSupported() { return typeof Notification !== 'undefined'; }
   function notifPermissionGranted() { return notifSupported() && Notification.permission === 'granted'; }
 
+  // ---- Avisos push reales: llegan aunque el móvil esté bloqueado o el
+  // navegador cerrado, porque los manda el servidor (no solo mientras la
+  // pestaña está abierta como el aviso de arriba). ----
+  const VAPID_PUBLIC_KEY = 'BLG1jXrjJbAE5fsTSXg0Au-RKf2PvL0XvNSIcZrwP2B9328Hqxo4ZJuc7lEq1XzOfIsVWG6yuAr3kHspDWMVcrs';
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  // Da de alta (o refresca) la suscripción push de este dispositivo en
+  // Supabase, para que el scraper pueda mandarle avisos aunque la app no
+  // esté abierta. Se llama al pulsar "Activar avisos" y, en silencio, cada
+  // vez que alguien entra ya con el permiso concedido (para que quede
+  // guardada también en dispositivos nuevos).
+  async function subscribeToPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+    if (!currentUser) return false;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+      const json = sub.toJSON();
+      const { error } = await sb.from('push_subscriptions').upsert({
+        owner_id: currentUser.id,
+        endpoint: json.endpoint,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+      }, { onConflict: 'endpoint' });
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error('No se pudo suscribir a los avisos push', e);
+      return false;
+    }
+  }
+
   function updateNotifButton() {
     const btn = document.getElementById('btn-notif');
     if (!btn) return;
@@ -551,13 +597,20 @@
 
   async function requestNotifPermission() {
     if (!notifSupported()) { showToast('Este navegador no admite avisos'); return; }
-    if (Notification.permission === 'granted') { showToast('Los avisos ya están activados'); updateNotifButton(); return; }
+    if (Notification.permission === 'granted') {
+      showToast('Los avisos ya están activados');
+      updateNotifButton();
+      subscribeToPush();
+      return;
+    }
     if (Notification.permission === 'denied') { showToast('Los avisos están bloqueados, actívalos en los ajustes del navegador'); return; }
     const perm = await Notification.requestPermission();
     updateNotifButton();
     if (perm === 'granted') {
       showToast('Avisos activados');
       try { new Notification('Encaja', { body: 'Te avisaremos aquí cuando entre un piso que encaje con un comprador.' }); } catch (e) {}
+      const ok = await subscribeToPush();
+      if (!ok) showToast('Avisos activados, pero no se pudo dejar listo el aviso para cuando el móvil esté bloqueado. Vuelve a intentarlo en un rato.');
     } else {
       showToast('No se activaron los avisos');
     }
@@ -767,6 +820,7 @@
     renderUserBar();
     showAppScreen();
     updateNotifButton();
+    if (notifPermissionGranted()) subscribeToPush();
     subscribeRealtime();
     await loadAll();
   }

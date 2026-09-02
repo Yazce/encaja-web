@@ -337,3 +337,36 @@ delete from public.compradores where nombre = 'Jose Luis' and telefono = '601182
 
 -- Beatriz compra y también vende su casa en Río Park.
 update public.compradores set rol = 'ambos' where nombre = 'Beatriz' and telefono = '603655249';
+
+-- ============================================================
+-- Suscripciones push (avisos reales aunque el móvil esté bloqueado)
+-- ============================================================
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) default auth.uid(),
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists "push_subscriptions_select" on public.push_subscriptions;
+drop policy if exists "push_subscriptions_insert" on public.push_subscriptions;
+drop policy if exists "push_subscriptions_update" on public.push_subscriptions;
+drop policy if exists "push_subscriptions_delete" on public.push_subscriptions;
+
+-- Cada persona ve y gestiona solo sus propias suscripciones (el envío
+-- real lo hace el scraper con la service role key, que salta RLS).
+create policy "push_subscriptions_select" on public.push_subscriptions
+  for select using (owner_id = auth.uid() or public.is_admin());
+
+create policy "push_subscriptions_insert" on public.push_subscriptions
+  for insert with check (owner_id = auth.uid());
+
+create policy "push_subscriptions_update" on public.push_subscriptions
+  for update using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+create policy "push_subscriptions_delete" on public.push_subscriptions
+  for delete using (owner_id = auth.uid());
