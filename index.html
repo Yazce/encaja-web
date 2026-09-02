@@ -119,6 +119,17 @@
   .pw-toggle svg { width: 18px; height: 18px; }
   .form-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
   .hint { font-size: 12px; color: var(--ink-soft); }
+  .zona-picker {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px;
+    max-height: 150px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 10px; background: #FFFDFA;
+  }
+  .zona-picker label.zona-chk {
+    display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 400;
+    text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0; padding: 3px 0; cursor: pointer;
+  }
+  .zona-picker label.zona-chk input { width: auto; }
+  @media (max-width: 560px) { .zona-picker { grid-template-columns: 1fr; } }
   button.primary {
     appearance: none; border: none; cursor: pointer; font-family: inherit;
     background: var(--accent); color: #fff; font-size: 13.5px; font-weight: 600;
@@ -370,7 +381,11 @@
               <option value="ambos">Compra y vende</option>
             </select>
           </div>
-          <div><label>Zona que busca</label><input type="text" id="c-zona" placeholder="Playa San Juan"></div>
+          <div class="full">
+            <label>Zona(s) que busca</label>
+            <div class="zona-picker" id="c-zona-picker"></div>
+            <input type="text" id="c-zona-otra" placeholder="¿No está en la lista? Escríbela aquí" style="margin-top:6px;">
+          </div>
           <div>
             <label>Tipo</label>
             <select id="c-tipo">
@@ -379,10 +394,11 @@
             </select>
           </div>
           <div><label>Presupuesto máx. (€)</label><input type="number" id="c-presupuesto" placeholder="220000"></div>
-          <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="c-caract" placeholder="3 hab, terraza, cerca del cole, con ascensor..."></textarea></div>
+          <div><label>Nº mín. de habitaciones</label><input type="number" id="c-habitaciones-min" min="0" placeholder="3"></div>
+          <div class="full"><label>Qué busca (otras características)</label><textarea id="c-caract" placeholder="terraza, cerca del cole, con ascensor..."></textarea></div>
         </div>
         <div class="form-footer">
-          <span class="hint">Los campos de zona, tipo y presupuesto se usan para buscar coincidencias. Los vendedores puros no entran en las coincidencias como compradores.</span>
+          <span class="hint">Marca una o varias zonas de la lista (son las mismas zonas reales de los pisos). Zona, tipo, presupuesto y habitaciones se usan para buscar coincidencias. Los vendedores puros no entran en las coincidencias como compradores.</span>
           <button type="submit" class="primary">Añadir comprador</button>
         </div>
       </form>
@@ -444,7 +460,11 @@
           <div class="grid">
             <div><label>Nombre</label><input type="text" id="ac-nombre" required placeholder="María López"></div>
             <div><label>Teléfono</label><input type="tel" id="ac-telefono" required placeholder="612 345 678"></div>
-            <div><label>Zona que busca</label><input type="text" id="ac-zona" placeholder="Playa San Juan"></div>
+            <div class="full">
+              <label>Zona(s) que busca</label>
+              <div class="zona-picker" id="ac-zona-picker"></div>
+              <input type="text" id="ac-zona-otra" placeholder="¿No está en la lista? Escríbela aquí" style="margin-top:6px;">
+            </div>
             <div>
               <label>Tipo</label>
               <select id="ac-tipo">
@@ -453,7 +473,8 @@
               </select>
             </div>
             <div><label>Renta máx. (€/mes)</label><input type="number" id="ac-presupuesto" placeholder="1100"></div>
-            <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="ac-caract" placeholder="2 hab, amueblado, con ascensor..."></textarea></div>
+            <div><label>Nº mín. de habitaciones</label><input type="number" id="ac-habitaciones-min" min="0" placeholder="2"></div>
+            <div class="full"><label>Qué busca (otras características)</label><textarea id="ac-caract" placeholder="amueblado, con ascensor..."></textarea></div>
           </div>
           <div class="form-footer">
             <span class="hint">Esta lista es solo de alquiler, no se mezcla con Compradores.</span>
@@ -715,6 +736,59 @@
     return `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`;
   }
 
+  // ---- Zonas reales (mismas que aparecen en los pisos de la web) ----
+  // Lista tomada de los valores de zona ya existentes en la tabla de pisos,
+  // para que elegir una zona aquí garantice que coincide exactamente con la
+  // zona de los pisos reales (antes se escribía a mano y bastaba una
+  // pequeña diferencia de texto para que nunca saliera ninguna coincidencia).
+  const ZONAS_CONOCIDAS = [
+    'Sant Vicent del Raspeig - Sol y Luz', '400 viviendas', 'Altozano', 'Babel', 'Benalua',
+    'Campoamor', 'Carolinas Altas', 'Carolinas bajas', 'Centro', 'Centro Tradicional',
+    'Ciudad de Asís', 'Ciudad Elegida', 'Colonia Santa Isabel', 'El Moralet',
+    'Garbinet-Parque de las Avenidas', 'Juan XXIII', 'La Albufereta', 'La Florida',
+    'La florida portazgo', 'Los Ángeles', 'Los Ángeles-Tómbola-San Nicolás', 'Mercado',
+    'Nou Alacant', 'Paus', 'Pla del bon repos', 'Plà del Bon Repòs-La Goteta',
+    'Playa de San Juan', 'Raval Roig-Virgen del Socorro', 'San Blas', 'San Gabriel',
+    'San nicolas de bari - Benisaudet', 'Santa ana', 'Santo Domingo', 'Sur',
+    'Tómbola - Rabasa', 'Vicente Savall', 'Villamontes-Boqueres',
+    'Virgen del Remedio-Parque lo Morant', 'Vistahermosa',
+  ];
+
+  // Rellena el recuadro de checkboxes de zonas de un formulario, marcando
+  // las que ya estén en zonaTexto (que puede traer varias separadas por
+  // comas, p.ej. al editar un comprador que ya tenía zona guardada).
+  function fillZonaPicker(pickerId, otraId, zonaTexto) {
+    const picker = document.getElementById(pickerId);
+    if (!picker) return;
+    const partes = (zonaTexto || '').split(',').map(s => s.trim()).filter(Boolean);
+    const conocidasNorm = ZONAS_CONOCIDAS.map(norm);
+    picker.innerHTML = ZONAS_CONOCIDAS.map(z =>
+      `<label class="zona-chk"><input type="checkbox" value="${esc(z)}"${partes.some(p => norm(p) === norm(z)) ? ' checked' : ''}> ${esc(z)}</label>`
+    ).join('');
+    const otras = partes.filter(p => !conocidasNorm.includes(norm(p)));
+    const otraInput = document.getElementById(otraId);
+    if (otraInput) otraInput.value = otras.join(', ');
+  }
+
+  // Lee las zonas marcadas + lo escrito a mano en "otra zona" y las junta en
+  // un único texto separado por comas (mismo formato que se guardaba antes,
+  // así el resto del código — zonaMatches, WhatsApp, etc. — no cambia).
+  function readZonaPicker(pickerId, otraId) {
+    const picker = document.getElementById(pickerId);
+    const marcadas = picker ? Array.from(picker.querySelectorAll('input:checked')).map(i => i.value) : [];
+    const otraInput = document.getElementById(otraId);
+    const otras = otraInput ? otraInput.value.split(',').map(s => s.trim()).filter(Boolean) : [];
+    return [...marcadas, ...otras].join(', ');
+  }
+
+  // Extrae el número de habitaciones de un piso a partir del texto de
+  // características que manda el scraper (p.ej. "3 hab · 2 baños · 89m2...").
+  // No hay una columna aparte para esto, así que se interpreta el texto.
+  function habitacionesDe(piso) {
+    const m = (piso.caract || '').match(/(\d+)\s*hab/i);
+    return m ? Number(m[1]) : null;
+  }
+
   function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg;
@@ -913,16 +987,23 @@
   });
 
   // ---- Forms ----
+  // Rellena los recuadros de zonas de los formularios de "Añadir" en cuanto
+  // arranca la página (los de "Editar" se rellenan al abrir cada edición).
+  fillZonaPicker('c-zona-picker', 'c-zona-otra', '');
+  fillZonaPicker('ac-zona-picker', 'ac-zona-otra', '');
+
   document.getElementById('form-comprador').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const habMinVal = document.getElementById('c-habitaciones-min').value;
     const item = {
       id: uid(),
       nombre: document.getElementById('c-nombre').value.trim(),
       telefono: document.getElementById('c-telefono').value.trim(),
       rol: document.getElementById('c-rol').value || 'comprador',
-      zona: document.getElementById('c-zona').value.trim(),
+      zona: readZonaPicker('c-zona-picker', 'c-zona-otra'),
       tipo: document.getElementById('c-tipo').value,
       presupuesto: document.getElementById('c-presupuesto').value ? Number(document.getElementById('c-presupuesto').value) : null,
+      habitaciones_min: habMinVal ? Number(habMinVal) : null,
       caract: document.getElementById('c-caract').value.trim(),
       agente: currentAgentName(),
       fecha: new Date().toISOString(),
@@ -931,6 +1012,7 @@
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     state.compradores.unshift(item);
     e.target.reset();
+    fillZonaPicker('c-zona-picker', 'c-zona-otra', '');
     renderAll();
     showToast('Comprador añadido');
   });
@@ -957,13 +1039,15 @@
   // ---- Alquiler (independiente de Compradores/Pisos) ----
   document.getElementById('form-alq-cliente').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const acHabMinVal = document.getElementById('ac-habitaciones-min').value;
     const item = {
       id: uid(),
       nombre: document.getElementById('ac-nombre').value.trim(),
       telefono: document.getElementById('ac-telefono').value.trim(),
-      zona: document.getElementById('ac-zona').value.trim(),
+      zona: readZonaPicker('ac-zona-picker', 'ac-zona-otra'),
       tipo: document.getElementById('ac-tipo').value,
       presupuesto: document.getElementById('ac-presupuesto').value ? Number(document.getElementById('ac-presupuesto').value) : null,
+      habitaciones_min: acHabMinVal ? Number(acHabMinVal) : null,
       caract: document.getElementById('ac-caract').value.trim(),
       agente: currentAgentName(),
       fecha: new Date().toISOString(),
@@ -972,6 +1056,7 @@
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     state.alquilerClientes.unshift(item);
     e.target.reset();
+    fillZonaPicker('ac-zona-picker', 'ac-zona-otra', '');
     renderAll();
     showToast('Añadido a Alquiler');
   });
@@ -1017,6 +1102,10 @@
     return wa.some(w => wb.includes(w));
   }
 
+  // Un piso por debajo de este % del presupuesto no se considera un buen
+  // encaje (quien busca hasta 350.000 € no quiere ver uno de 123.000 €).
+  const PRESUPUESTO_MIN_PCT = 0.6;
+
   function computeMatches() {
     const matches = [];
     for (const piso of state.pisos) {
@@ -1029,7 +1118,13 @@
         if (comprador.tipo && piso.tipo && comprador.tipo !== piso.tipo) continue;
         if (comprador.tipo && piso.tipo) reasons.push('Tipo');
         if (comprador.presupuesto && piso.precio && piso.precio > comprador.presupuesto) continue;
+        if (comprador.presupuesto && piso.precio && piso.precio < comprador.presupuesto * PRESUPUESTO_MIN_PCT) continue;
         if (comprador.presupuesto && piso.precio) reasons.push('Presupuesto');
+        if (comprador.habitaciones_min) {
+          const hab = habitacionesDe(piso);
+          if (hab !== null && hab < comprador.habitaciones_min) continue;
+          if (hab !== null) reasons.push('Habitaciones');
+        }
         const key = comprador.id + '::' + piso.id;
         if (state.contactados[key]) continue;
         matches.push({ key, comprador, piso, reasons });
@@ -1048,7 +1143,13 @@
         if (cliente.tipo && piso.tipo && cliente.tipo !== piso.tipo) continue;
         if (cliente.tipo && piso.tipo) reasons.push('Tipo');
         if (cliente.presupuesto && piso.precio && piso.precio > cliente.presupuesto) continue;
+        if (cliente.presupuesto && piso.precio && piso.precio < cliente.presupuesto * PRESUPUESTO_MIN_PCT) continue;
         if (cliente.presupuesto && piso.precio) reasons.push('Presupuesto');
+        if (cliente.habitaciones_min) {
+          const hab = habitacionesDe(piso);
+          if (hab !== null && hab < cliente.habitaciones_min) continue;
+          if (hab !== null) reasons.push('Habitaciones');
+        }
         const key = cliente.id + '::' + piso.id;
         if (state.alquilerContactados[key]) continue;
         matches.push({ key, comprador: cliente, piso, reasons });
@@ -1057,7 +1158,34 @@
     return matches;
   }
 
-  const MAX_PISOS_POR_MENSAJE = 4;
+  // Antes se mandaban 4 pisos por mensaje ordenados solo por fecha; ahora se
+  // manda un Top 5 ordenado por lo que mejor encaja (precio cercano al
+  // presupuesto, zona y tipo exactos), para no saturar al cliente.
+  const MAX_PISOS_POR_MENSAJE = 5;
+
+  function matchScore(m) {
+    const c = m.comprador, p = m.piso;
+    let score = 0;
+    if (c.presupuesto && p.precio) {
+      const ratio = p.precio / c.presupuesto; // 1 = justo en el presupuesto
+      score += Math.max(0, 1 - Math.abs(1 - ratio)) * 50;
+    } else {
+      score += 20;
+    }
+    const na = norm(p.zona), nb = norm(c.zona);
+    if (na && nb) {
+      if (na === nb) score += 30;
+      else if (na.includes(nb) || nb.includes(na)) score += 15;
+    }
+    if (c.tipo && p.tipo && c.tipo === p.tipo) score += 10;
+    if (c.habitaciones_min) {
+      const hab = habitacionesDe(p);
+      if (hab !== null && hab >= c.habitaciones_min) score += 10;
+    }
+    const diasDesde = (Date.now() - new Date(p.fecha || 0).getTime()) / 86400000;
+    score += Math.max(0, 5 - Math.min(5, diasDesde / 10)); // desempate: lo más reciente, un poco mejor
+    return score;
+  }
 
   function groupMatches(matches) {
     const map = new Map();
@@ -1066,7 +1194,7 @@
       map.get(m.comprador.id).push(m);
     }
     const groups = Array.from(map.values()).map(list => {
-      list.sort((a, b) => new Date(b.piso.fecha || 0) - new Date(a.piso.fecha || 0));
+      list.sort((a, b) => matchScore(b) - matchScore(a));
       return { comprador: list[0].comprador, all: list, top: list.slice(0, MAX_PISOS_POR_MENSAJE) };
     });
     groups.sort((a, b) => a.comprador.nombre.localeCompare(b.comprador.nombre, 'es'));
@@ -1234,10 +1362,15 @@
           <div><label>Nombre</label><input type="text" id="edit-nombre-${c.id}" value="${esc(c.nombre)}"></div>
           <div><label>Teléfono</label><input type="tel" id="edit-telefono-${c.id}" value="${esc(c.telefono)}"></div>
           <div><label>Es</label><select id="edit-rol-${c.id}">${rolOptionsHtml(c.rol)}</select></div>
-          <div><label>Zona que busca</label><input type="text" id="edit-zona-${c.id}" value="${esc(c.zona)}"></div>
+          <div class="full">
+            <label>Zona(s) que busca</label>
+            <div class="zona-picker" id="edit-zona-picker-${c.id}"></div>
+            <input type="text" id="edit-zona-otra-${c.id}" placeholder="¿No está en la lista? Escríbela aquí" style="margin-top:6px;">
+          </div>
           <div><label>Tipo</label><select id="edit-tipo-${c.id}">${tipoOptionsHtml(c.tipo)}</select></div>
           <div><label>Presupuesto máx. (€)</label><input type="number" id="edit-presupuesto-${c.id}" value="${c.presupuesto || ''}"></div>
-          <div class="full"><label>Qué busca (habitaciones, características...)</label><textarea id="edit-caract-${c.id}">${esc(c.caract)}</textarea></div>
+          <div><label>Nº mín. de habitaciones</label><input type="number" id="edit-habitaciones-min-${c.id}" min="0" value="${c.habitaciones_min || ''}"></div>
+          <div class="full"><label>Qué busca (otras características)</label><textarea id="edit-caract-${c.id}">${esc(c.caract)}</textarea></div>
           <div class="full"><label>Notas</label><textarea id="edit-notas-${c.id}" placeholder="Anotaciones internas: qué vende, condiciones, avisos...">${esc(c.notas)}</textarea></div>
         </div>
         <div class="form-footer">
@@ -1252,7 +1385,7 @@
       <li class="item">
         <div class="item-main">
           <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}</div>
-          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span></div>
+          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           ${c.notas ? `<div class="item-notes"><strong>Notas:</strong> ${esc(c.notas)}</div>` : ''}
           <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
@@ -1279,6 +1412,10 @@
         <ul class="list">${lista.map(c => c.id === editingCompradorId ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('')}</ul>`;
     };
     el.innerHTML = seccion('Vende', vendedores) + seccion('Compra', compradores);
+    if (editingCompradorId) {
+      const c = state.compradores.find(x => x.id === editingCompradorId);
+      if (c) fillZonaPicker(`edit-zona-picker-${c.id}`, `edit-zona-otra-${c.id}`, c.zona);
+    }
     bindDeletes(el);
     el.querySelectorAll('[data-editcomprador]').forEach(btn => {
       btn.addEventListener('click', () => { editingCompradorId = btn.dataset.editcomprador; renderCompradores(); });
@@ -1300,9 +1437,10 @@
       nombre,
       telefono,
       rol: document.getElementById(`edit-rol-${id}`).value || 'comprador',
-      zona: document.getElementById(`edit-zona-${id}`).value.trim(),
+      zona: readZonaPicker(`edit-zona-picker-${id}`, `edit-zona-otra-${id}`),
       tipo: document.getElementById(`edit-tipo-${id}`).value,
       presupuesto: presupuestoVal ? Number(presupuestoVal) : null,
+      habitaciones_min: (() => { const v = document.getElementById(`edit-habitaciones-min-${id}`).value; return v ? Number(v) : null; })(),
       caract: document.getElementById(`edit-caract-${id}`).value.trim(),
       notas: document.getElementById(`edit-notas-${id}`).value.trim(),
     };
@@ -1349,7 +1487,7 @@
       <li class="item">
         <div class="item-main">
           <div class="item-name">${esc(c.nombre)}</div>
-          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>/mes</div>
+          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>/mes${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
         </div>
@@ -1366,10 +1504,15 @@
         <div class="grid">
           <div><label>Nombre</label><input type="text" id="editac-nombre-${c.id}" value="${esc(c.nombre)}"></div>
           <div><label>Teléfono</label><input type="tel" id="editac-telefono-${c.id}" value="${esc(c.telefono)}"></div>
-          <div><label>Zona que busca</label><input type="text" id="editac-zona-${c.id}" value="${esc(c.zona)}"></div>
+          <div class="full">
+            <label>Zona(s) que busca</label>
+            <div class="zona-picker" id="editac-zona-picker-${c.id}"></div>
+            <input type="text" id="editac-zona-otra-${c.id}" placeholder="¿No está en la lista? Escríbela aquí" style="margin-top:6px;">
+          </div>
           <div><label>Tipo</label><select id="editac-tipo-${c.id}">${tipoOptionsHtml(c.tipo)}</select></div>
           <div><label>Renta máx. (€/mes)</label><input type="number" id="editac-presupuesto-${c.id}" value="${c.presupuesto || ''}"></div>
-          <div class="full"><label>Qué busca</label><textarea id="editac-caract-${c.id}">${esc(c.caract)}</textarea></div>
+          <div><label>Nº mín. de habitaciones</label><input type="number" id="editac-habitaciones-min-${c.id}" min="0" value="${c.habitaciones_min || ''}"></div>
+          <div class="full"><label>Qué busca (otras características)</label><textarea id="editac-caract-${c.id}">${esc(c.caract)}</textarea></div>
         </div>
         <div class="form-footer">
           <button class="ghost" data-cancelalqcliente="${c.id}">Cancelar</button>
@@ -1387,6 +1530,10 @@
     el.innerHTML = '<ul class="list">' + state.alquilerClientes.map(c =>
       c.id === editingAlqClienteId ? alqClienteEditFormHtml(c) : alqClienteRowHtml(c)
     ).join('') + '</ul>';
+    if (editingAlqClienteId) {
+      const c = state.alquilerClientes.find(x => x.id === editingAlqClienteId);
+      if (c) fillZonaPicker(`editac-zona-picker-${c.id}`, `editac-zona-otra-${c.id}`, c.zona);
+    }
     bindDeletes(el);
     el.querySelectorAll('[data-editalqcliente]').forEach(btn => {
       btn.addEventListener('click', () => { editingAlqClienteId = btn.dataset.editalqcliente; renderAlqClientes(); });
@@ -1407,9 +1554,10 @@
     const patch = {
       nombre,
       telefono,
-      zona: document.getElementById(`editac-zona-${id}`).value.trim(),
+      zona: readZonaPicker(`editac-zona-picker-${id}`, `editac-zona-otra-${id}`),
       tipo: document.getElementById(`editac-tipo-${id}`).value,
       presupuesto: presupuestoVal ? Number(presupuestoVal) : null,
+      habitaciones_min: (() => { const v = document.getElementById(`editac-habitaciones-min-${id}`).value; return v ? Number(v) : null; })(),
       caract: document.getElementById(`editac-caract-${id}`).value.trim(),
     };
     const { error } = await sb.from('alquiler_clientes').update(patch).eq('id', id);
@@ -1495,7 +1643,10 @@
 
   function bindDeletes(container) {
     container.querySelectorAll('button.del').forEach(btn => {
-      btn.addEventListener('click', () => deleteItem(btn.dataset.list, btn.dataset.table, btn.dataset.id));
+      btn.addEventListener('click', () => {
+        if (!confirm('¿Seguro que quieres eliminar esto? No se puede deshacer.')) return;
+        deleteItem(btn.dataset.list, btn.dataset.table, btn.dataset.id);
+      });
     });
   }
 
