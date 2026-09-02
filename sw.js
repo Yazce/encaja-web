@@ -61,7 +61,17 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
       for (const client of clientsArr) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          // Si Encaja ya estaba abierta (aunque fuera en otra pantalla),
+          // antes solo se enfocaba la ventana tal cual estaba, sin llevarla
+          // a la coincidencia del aviso. Ahora, si el navegador lo permite,
+          // la navegamos primero a la URL del aviso (con el comprador) y
+          // luego la enfocamos.
+          if ('navigate' in client) {
+            return client.navigate(url).then((c) => (c || client).focus()).catch(() => client.focus());
+          }
+          return client.focus();
+        }
       }
       if (self.clients.openWindow) return self.clients.openWindow(url);
     })
