@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnóstico Encaja</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; background:#0f2027; color:#fff; padding:16px; font-size:16px; line-height:1.5; }
+  h1 { font-size:20px; }
+  .row { background:#16323a; border-radius:10px; padding:12px; margin-bottom:10px; }
+  .ok { color:#7CFC9A; font-weight:bold; }
+  .bad { color:#FF8A8A; font-weight:bold; }
+  .warn { color:#FFD27A; font-weight:bold; }
+  code { word-break: break-all; font-size:13px; color:#9fd; }
+  button { background:#1C3D45; color:#fff; border:1px solid #7CFC9A; border-radius:8px; padding:12px 16px; font-size:16px; margin-top:10px; width:100%; }
+</style>
+</head>
+<body>
+<h1>Diagnóstico Encaja 🔎</h1>
+<div id="out">Cargando...</div>
+<button id="btnLocal">Probar notificación LOCAL (sin internet)</button>
+<div id="localResult"></div>
+
+<script>
+const out = document.getElementById('out');
+function line(label, value, cls) {
+  return `<div class="row">${label}<br><span class="${cls||''}">${value}</span></div>`;
+}
+
+async function run() {
+  let html = '';
+
+  // 1. Soporte
+  const hasSW = 'serviceWorker' in navigator;
+  const hasPush = 'PushManager' in window;
+  const hasNotif = 'Notification' in window;
+  html += line('Service Worker soportado', hasSW ? 'SÍ' : 'NO', hasSW ? 'ok' : 'bad');
+  html += line('Push soportado', hasPush ? 'SÍ' : 'NO', hasPush ? 'ok' : 'bad');
+  html += line('Notification soportado', hasNotif ? 'SÍ' : 'NO', hasNotif ? 'ok' : 'bad');
+
+  // 2. Permiso
+  const perm = hasNotif ? Notification.permission : 'n/a';
+  html += line('Permiso de notificación', perm, perm === 'granted' ? 'ok' : 'bad');
+
+  // 3. Registro del service worker
+  if (hasSW) {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) {
+      html += line('Registro del Service Worker', 'NO HAY NINGÚN REGISTRO', 'bad');
+    } else {
+      html += line('Scope del Service Worker', reg.scope, 'ok');
+      const state = reg.active ? 'active' : (reg.installing ? 'installing' : (reg.waiting ? 'waiting' : 'ninguno'));
+      html += line('Estado del Service Worker', state, state === 'active' ? 'ok' : 'warn');
+      if (reg.active) {
+        html += line('Script del Service Worker', reg.active.scriptURL, 'ok');
+      }
+
+      // 4. Suscripción push actual
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        html += line('Suscripción push actual', 'NO HAY SUSCRIPCIÓN ACTIVA', 'bad');
+      } else {
+        const json = sub.toJSON();
+        html += line('Endpoint de la suscripción actual', json.endpoint, 'ok');
+      }
+    }
+  }
+
+  out.innerHTML = html;
+}
+run().catch(e => { out.innerHTML = '<div class="row bad">Error: ' + (e && e.message) + '</div>'; });
+
+document.getElementById('btnLocal').addEventListener('click', async () => {
+  const r = document.getElementById('localResult');
+  try {
+    if (Notification.permission !== 'granted') {
+      r.innerHTML = '<div class="row bad">No tienes permiso concedido, no se puede probar.</div>';
+      return;
+    }
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg) {
+      await reg.showNotification('Prueba LOCAL de Encaja', { body: 'Si ves esto, tu móvil SÍ puede mostrar notificaciones.', icon: '/icon-192.png' });
+    } else {
+      new Notification('Prueba LOCAL de Encaja', { body: 'Si ves esto, tu móvil SÍ puede mostrar notificaciones.' });
+    }
+    r.innerHTML = '<div class="row ok">Notificación local enviada. Mira arriba en la pantalla / desliza desde arriba.</div>';
+  } catch (e) {
+    r.innerHTML = '<div class="row bad">Error al mostrar: ' + e.message + '</div>';
+  }
+});
+</script>
+</body>
+</html>
