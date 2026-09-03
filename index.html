@@ -374,6 +374,7 @@
 
   <nav class="tabs">
     <button data-tab="compradores" class="active">Compradores <span class="count" id="count-compradores">0</span></button>
+    <button data-tab="vendedores">Vendedores <span class="count" id="count-vendedores">0</span></button>
     <button data-tab="pisos">Pisos nuevos <span class="count" id="count-pisos">0</span></button>
     <button data-tab="matches">Coincidencias <span class="count" id="count-matches">0</span></button>
     <button data-tab="alquiler">Alquiler <span class="count" id="count-alquiler">0</span></button>
@@ -421,6 +422,50 @@
     <h2 class="section-title">Lista de compradores</h2>
     <input type="text" id="compradores-filtro" placeholder="Buscar por nombre, teléfono, zona..." style="margin-bottom:12px;">
     <div id="list-compradores"><div class="loading">Cargando…</div></div>
+  </section>
+
+  <!-- VENDEDORES (misma tabla que Compradores, filtrada por rol) -->
+  <section class="panel" id="panel-vendedores">
+    <div class="card entry">
+      <form id="form-vendedor" class="entry">
+        <h2 class="section-title">Añadir vendedor</h2>
+        <div class="grid">
+          <div><label>Nombre</label><input type="text" id="v-nombre" required placeholder="María López"></div>
+          <div><label>Teléfono</label><input type="tel" id="v-telefono" required placeholder="612 345 678"></div>
+          <div>
+            <label>Es</label>
+            <select id="v-rol">
+              <option value="vendedor" selected>Vendedor</option>
+              <option value="comprador">Comprador</option>
+              <option value="ambos">Compra y vende</option>
+            </select>
+          </div>
+          <div class="full">
+            <label>Zona(s) del piso / que busca</label>
+            <div class="zona-picker" id="v-zona-picker"></div>
+            <input type="text" id="v-zona-otra" placeholder="¿No está en la lista? Escríbela aquí" style="margin-top:6px;">
+          </div>
+          <div>
+            <label>Tipo</label>
+            <select id="v-tipo">
+              <option value="">Cualquiera</option>
+              <option>Piso</option><option>Ático</option><option>Chalet</option><option>Casa</option><option>Estudio</option>
+            </select>
+          </div>
+          <div><label>Presupuesto / precio (€)</label><input type="number" id="v-presupuesto" placeholder="220000"></div>
+          <div><label>Nº mín. de habitaciones</label><input type="number" id="v-habitaciones-min" min="0" placeholder="3"></div>
+          <div class="full"><label>Qué vende (otras características)</label><textarea id="v-caract" placeholder="terraza, cerca del cole, con ascensor..."></textarea></div>
+        </div>
+        <div class="form-footer">
+          <span class="hint">Se guarda en la misma lista que Compradores, solo que aquí lo ves aparte. Si marca "Compra y vende" aparecerá también en la pestaña Compradores.</span>
+          <button type="submit" class="primary">Añadir vendedor</button>
+        </div>
+      </form>
+    </div>
+    <div style="height:20px"></div>
+    <h2 class="section-title">Lista de vendedores</h2>
+    <input type="text" id="vendedores-filtro" placeholder="Buscar por nombre, teléfono, zona..." style="margin-bottom:12px;">
+    <div id="list-vendedores"><div class="loading">Cargando…</div></div>
   </section>
 
   <!-- PISOS -->
@@ -576,9 +621,11 @@
   let currentProfile = null;
   let realtimeChannel = null;
   let editingCompradorId = null;
+  let editingCompradorTab = null; // 'compradores' o 'vendedores': qué pestaña abrió el formulario de edición
   let editingAlqClienteId = null;
   let pisosFiltroText = '';
   let compradoresFiltroText = '';
+  let vendedoresFiltroText = '';
   let alqClientesFiltroText = '';
   let expandedMatchKey = null;
 
@@ -692,7 +739,7 @@
     nuevos.forEach(m => {
       try {
         const n = new Notification('Encaja — nueva coincidencia', {
-          body: `${m.comprador.nombre} encaja con ${m.piso.zona}${m.piso.tipo ? ' · ' + m.piso.tipo : ''} · ${fmtMoney(m.piso.precio)}`,
+          body: `${m.comprador.nombre} (${m.comprador.agente || 'sin asignar'}) encaja con ${m.piso.zona}${m.piso.tipo ? ' · ' + m.piso.tipo : ''} · ${fmtMoney(m.piso.precio)}`,
           tag: m.key,
         });
         n.onclick = () => {
@@ -733,7 +780,7 @@
     nuevos.forEach(m => {
       try {
         const n = new Notification('Encaja — nueva coincidencia de alquiler', {
-          body: `${m.comprador.nombre} encaja con ${m.piso.zona}${m.piso.tipo ? ' · ' + m.piso.tipo : ''} · ${fmtMoney(m.piso.precio)}/mes`,
+          body: `${m.comprador.nombre} (${m.comprador.agente || 'sin asignar'}) encaja con ${m.piso.zona}${m.piso.tipo ? ' · ' + m.piso.tipo : ''} · ${fmtMoney(m.piso.precio)}/mes`,
           tag: m.key,
         });
         n.onclick = () => {
@@ -1070,6 +1117,11 @@
     renderCompradores();
   });
 
+  document.getElementById('vendedores-filtro').addEventListener('input', (e) => {
+    vendedoresFiltroText = e.target.value;
+    renderVendedores();
+  });
+
   document.getElementById('alq-clientes-filtro').addEventListener('input', (e) => {
     alqClientesFiltroText = e.target.value;
     renderAlqClientes();
@@ -1098,6 +1150,32 @@
     fillZonaPicker('c-zona-picker', 'c-zona-otra', '');
     renderAll();
     showToast('Comprador añadido');
+  });
+
+  fillZonaPicker('v-zona-picker', 'v-zona-otra', '');
+  document.getElementById('form-vendedor').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const habMinVal = document.getElementById('v-habitaciones-min').value;
+    const item = {
+      id: uid(),
+      nombre: document.getElementById('v-nombre').value.trim(),
+      telefono: document.getElementById('v-telefono').value.trim(),
+      rol: document.getElementById('v-rol').value || 'vendedor',
+      zona: readZonaPicker('v-zona-picker', 'v-zona-otra'),
+      tipo: document.getElementById('v-tipo').value,
+      presupuesto: document.getElementById('v-presupuesto').value ? Number(document.getElementById('v-presupuesto').value) : null,
+      habitaciones_min: habMinVal ? Number(habMinVal) : null,
+      caract: document.getElementById('v-caract').value.trim(),
+      agente: currentAgentName(),
+      fecha: new Date().toISOString(),
+    };
+    const { error } = await sb.from('compradores').insert(item);
+    if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
+    state.compradores.unshift(item);
+    e.target.reset();
+    fillZonaPicker('v-zona-picker', 'v-zona-otra', '');
+    renderAll();
+    showToast('Vendedor añadido');
   });
 
   document.getElementById('form-piso').addEventListener('submit', async (e) => {
@@ -1399,11 +1477,13 @@
 
   // ---- Render ----
   function renderAll() {
-    document.getElementById('count-compradores').textContent = state.compradores.length;
+    document.getElementById('count-compradores').textContent = state.compradores.filter(c => c.rol !== 'vendedor').length;
+    document.getElementById('count-vendedores').textContent = state.compradores.filter(c => c.rol === 'vendedor' || c.rol === 'ambos').length;
     document.getElementById('count-pisos').textContent = state.pisos.length;
     const matches = computeMatches();
     document.getElementById('count-matches').textContent = matches.length;
     renderCompradores();
+    renderVendedores();
     renderPisos();
     renderMatches(matches);
 
@@ -1513,44 +1593,62 @@
       </li>`;
   }
 
-  function renderCompradores() {
-    const el = document.getElementById('list-compradores');
-    if (!state.compradores.length) {
-      el.innerHTML = emptyState('Todavía no hay compradores en la lista. Añade el primero para empezar a encontrarles piso.');
+  // Compradores y Vendedores viven en la misma tabla `compradores`, distinguidos
+  // por `rol` (comprador / vendedor / ambos). "Ambos" aparece en las dos pestañas,
+  // porque de verdad compra y vende a la vez.
+  function renderListaPersonas(opts) {
+    const { containerId, listaCompleta, textoFiltroRaw, tab, emptyMsg, mostrarEnLista } = opts;
+    const el = document.getElementById(containerId);
+    if (!listaCompleta.length) {
+      el.innerHTML = emptyState(emptyMsg);
       return;
     }
-    const textoFiltro = norm(compradoresFiltroText);
-    const visibles = state.compradores.filter(c => personaMatchesFiltro(c, textoFiltro));
+    const textoFiltro = norm(textoFiltroRaw);
+    const visibles = listaCompleta.filter(c => mostrarEnLista(c) && personaMatchesFiltro(c, textoFiltro));
     if (!visibles.length) {
       el.innerHTML = emptyState('Nadie coincide con la búsqueda.');
       return;
     }
-    const vendedores = visibles.filter(c => c.rol === 'vendedor' || c.rol === 'ambos');
-    const compradores = visibles.filter(c => c.rol !== 'vendedor' && c.rol !== 'ambos');
-    const seccion = (titulo, lista) => {
-      if (!lista.length) return '';
-      return `
-        <div class="subsection-title">${titulo} <span class="count">${lista.length}</span></div>
-        <ul class="list">${lista.map(c => c.id === editingCompradorId ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('')}</ul>`;
-    };
-    el.innerHTML = (textoFiltro ? `<div class="hint" style="margin-bottom:8px;">${visibles.length} de ${state.compradores.length}</div>` : '') +
-      seccion('Vende', vendedores) + seccion('Compra', compradores);
-    if (editingCompradorId) {
-      const c = state.compradores.find(x => x.id === editingCompradorId);
+    el.innerHTML = (textoFiltro ? `<div class="hint" style="margin-bottom:8px;">${visibles.length} de ${listaCompleta.filter(mostrarEnLista).length}</div>` : '') +
+      '<ul class="list">' + visibles.map(c => (c.id === editingCompradorId && editingCompradorTab === tab) ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('') + '</ul>';
+    if (editingCompradorId && editingCompradorTab === tab) {
+      const c = listaCompleta.find(x => x.id === editingCompradorId);
       if (c) fillZonaPicker(`edit-zona-picker-${c.id}`, `edit-zona-otra-${c.id}`, c.zona);
     }
     bindDeletes(el);
     el.querySelectorAll('[data-editcomprador]').forEach(btn => {
-      btn.addEventListener('click', () => { editingCompradorId = btn.dataset.editcomprador; renderCompradores(); });
+      btn.addEventListener('click', () => { editingCompradorId = btn.dataset.editcomprador; editingCompradorTab = tab; renderCompradores(); renderVendedores(); });
     });
     el.querySelectorAll('[data-cancelcomprador]').forEach(btn => {
-      btn.addEventListener('click', () => { editingCompradorId = null; renderCompradores(); });
+      btn.addEventListener('click', () => { editingCompradorId = null; editingCompradorTab = null; renderCompradores(); renderVendedores(); });
     });
     el.querySelectorAll('[data-savecomprador]').forEach(btn => {
       btn.addEventListener('click', () => saveComprador(btn.dataset.savecomprador));
     });
     el.querySelectorAll('[data-quickestado]').forEach(sel => {
       sel.addEventListener('change', () => updateCompradorEstado(sel.dataset.quickestado, sel.value));
+    });
+  }
+
+  function renderCompradores() {
+    renderListaPersonas({
+      containerId: 'list-compradores',
+      listaCompleta: state.compradores,
+      textoFiltroRaw: compradoresFiltroText,
+      tab: 'compradores',
+      emptyMsg: 'Todavía no hay compradores en la lista. Añade el primero para empezar a encontrarles piso.',
+      mostrarEnLista: c => c.rol !== 'vendedor',
+    });
+  }
+
+  function renderVendedores() {
+    renderListaPersonas({
+      containerId: 'list-vendedores',
+      listaCompleta: state.compradores,
+      textoFiltroRaw: vendedoresFiltroText,
+      tab: 'vendedores',
+      emptyMsg: 'Todavía no hay vendedores en la lista. Añade el primero.',
+      mostrarEnLista: c => c.rol === 'vendedor' || c.rol === 'ambos',
     });
   }
 
@@ -1798,6 +1896,7 @@
           <div>
             <div class="match-group-name">${esc(g.comprador.nombre)}</div>
             <div class="match-group-meta"><span class="num">${esc(g.comprador.telefono)}</span> · ${esc(g.comprador.zona) || 'cualquier zona'} · <span class="num">${fmtMoney(g.comprador.presupuesto)}</span>/mes</div>
+            <div class="item-by">Comercial: ${esc(g.comprador.agente) || 'sin asignar'}</div>
           </div>
           <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}</span>
         </div>
@@ -1854,6 +1953,7 @@
           <div>
             <div class="match-group-name">${esc(g.comprador.nombre)}</div>
             <div class="match-group-meta"><span class="num">${esc(g.comprador.telefono)}</span> · ${esc(g.comprador.zona) || 'cualquier zona'} · <span class="num">${fmtMoney(g.comprador.presupuesto)}</span></div>
+            <div class="item-by">Comercial: ${esc(g.comprador.agente) || 'sin asignar'}</div>
           </div>
           <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}</span>
         </div>
