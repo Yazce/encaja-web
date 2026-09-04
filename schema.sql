@@ -61,6 +61,12 @@ drop policy if exists "perfiles_update_propio" on public.perfiles;
 create policy "perfiles_update_propio" on public.perfiles
   for update using (auth.uid() = id) with check (auth.uid() = id);
 
+-- Las administradoras además necesitan ver el nombre de TODO el equipo
+-- (no solo el suyo) para poder rellenar el selector "De quién es".
+drop policy if exists "perfiles_select_admin" on public.perfiles;
+create policy "perfiles_select_admin" on public.perfiles
+  for select using (public.is_admin());
+
 -- Crea el perfil automáticamente en cuanto se crea un usuario nuevo
 -- (por ejemplo, al añadirlo a mano desde Authentication → Users).
 create or replace function public.handle_new_user()
@@ -370,3 +376,11 @@ create policy "push_subscriptions_update" on public.push_subscriptions
 
 create policy "push_subscriptions_delete" on public.push_subscriptions
   for delete using (owner_id = auth.uid());
+
+-- ============================================================
+-- Ascensor / planta (compradores y vendedores)
+-- ============================================================
+-- ascensor: 'si' | 'no' | null (no indica). planta: texto libre
+-- ("Bajo", "Entlo", "1ª", "2ª", ...), solo relevante cuando ascensor='no'.
+alter table public.compradores add column if not exists ascensor text;
+alter table public.compradores add column if not exists planta text;

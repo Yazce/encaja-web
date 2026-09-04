@@ -100,6 +100,7 @@
   }
   form.entry { margin-bottom: 24px; }
   form.entry .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+  .contents { display: contents; }
   form.entry .full { grid-column: 1 / -1; }
   label { display: block; font-size: 11.5px; font-weight: 600; color: var(--ink-soft); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
   input, select, textarea {
@@ -410,7 +411,9 @@
           </div>
           <div><label>Presupuesto máx. (€)</label><input type="number" id="c-presupuesto" placeholder="220000"></div>
           <div><label>Nº mín. de habitaciones</label><input type="number" id="c-habitaciones-min" min="0" placeholder="3"></div>
-          <div class="full"><label>Qué busca (otras características)</label><textarea id="c-caract" placeholder="terraza, cerca del cole, con ascensor..."></textarea></div>
+          <div id="c-ascensor-planta-wrap" class="contents"></div>
+          <div id="c-owner-wrap" class="contents"></div>
+          <div class="full"><label>Qué busca (otras características)</label><textarea id="c-caract" placeholder="terraza, cerca del cole..."></textarea></div>
         </div>
         <div class="form-footer">
           <span class="hint">Marca una o varias zonas de la lista (son las mismas zonas reales de los pisos). Zona, tipo, presupuesto y habitaciones se usan para buscar coincidencias. Los vendedores puros no entran en las coincidencias como compradores.</span>
@@ -454,7 +457,9 @@
           </div>
           <div><label>Presupuesto / precio (€)</label><input type="number" id="v-presupuesto" placeholder="220000"></div>
           <div><label>Nº mín. de habitaciones</label><input type="number" id="v-habitaciones-min" min="0" placeholder="3"></div>
-          <div class="full"><label>Qué vende (otras características)</label><textarea id="v-caract" placeholder="terraza, cerca del cole, con ascensor..."></textarea></div>
+          <div id="v-ascensor-planta-wrap" class="contents"></div>
+          <div id="v-owner-wrap" class="contents"></div>
+          <div class="full"><label>Qué vende (otras características)</label><textarea id="v-caract" placeholder="terraza, cerca del cole..."></textarea></div>
         </div>
         <div class="form-footer">
           <span class="hint">Se guarda en la misma lista que Compradores, solo que aquí lo ves aparte. Si marca "Compra y vende" aparecerá también en la pestaña Compradores.</span>
@@ -1035,6 +1040,7 @@
     currentUser = session.user;
     currentProfile = await loadProfile(session.user);
     if (currentProfile && currentProfile.is_admin) await loadPerfiles();
+    renderAddFormExtras();
     renderUserBar();
     showAppScreen();
     updateNotifButton();
@@ -1049,7 +1055,9 @@
     state.compradores = [];
     state.pisos = [];
     state.contactados = {};
+    state.perfiles = [];
     unsubscribeRealtime();
+    renderAddFormExtras();
     showAuthScreen();
   }
 
@@ -1152,15 +1160,20 @@
       tipo: document.getElementById('c-tipo').value,
       presupuesto: document.getElementById('c-presupuesto').value ? Number(document.getElementById('c-presupuesto').value) : null,
       habitaciones_min: habMinVal ? Number(habMinVal) : null,
+      ascensor: document.getElementById('c-add-ascensor') ? (document.getElementById('c-add-ascensor').value || null) : null,
+      planta: document.getElementById('c-add-planta') ? (document.getElementById('c-add-planta').value || null) : null,
       caract: document.getElementById('c-caract').value.trim(),
       agente: currentAgentName(),
       fecha: new Date().toISOString(),
     };
+    const ownerOverride = ownerFromSelector('c-owner');
+    if (ownerOverride) { item.owner_id = ownerOverride.owner_id; item.agente = ownerOverride.agente; }
     const { error } = await sb.from('compradores').insert(item);
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     state.compradores.unshift(item);
     e.target.reset();
     fillZonaPicker('c-zona-picker', 'c-zona-otra', '');
+    renderAddFormExtras();
     renderAll();
     showToast('Comprador añadido');
   });
@@ -1178,15 +1191,20 @@
       tipo: document.getElementById('v-tipo').value,
       presupuesto: document.getElementById('v-presupuesto').value ? Number(document.getElementById('v-presupuesto').value) : null,
       habitaciones_min: habMinVal ? Number(habMinVal) : null,
+      ascensor: document.getElementById('v-add-ascensor') ? (document.getElementById('v-add-ascensor').value || null) : null,
+      planta: document.getElementById('v-add-planta') ? (document.getElementById('v-add-planta').value || null) : null,
       caract: document.getElementById('v-caract').value.trim(),
       agente: currentAgentName(),
       fecha: new Date().toISOString(),
     };
+    const ownerOverride = ownerFromSelector('v-owner');
+    if (ownerOverride) { item.owner_id = ownerOverride.owner_id; item.agente = ownerOverride.agente; }
     const { error } = await sb.from('compradores').insert(item);
     if (error) { console.error(error); showToast('No se pudo guardar, inténtalo de nuevo'); return; }
     state.compradores.unshift(item);
     e.target.reset();
     fillZonaPicker('v-zona-picker', 'v-zona-otra', '');
+    renderAddFormExtras();
     renderAll();
     showToast('Vendedor añadido');
   });
@@ -1555,10 +1573,70 @@
   // ejemplo tras una importación masiva de contactos.
   function agenteSelectorHtml(idAttr, ownerId) {
     if (!currentProfile || !currentProfile.is_admin || !state.perfiles.length) return '';
-    const opciones = state.perfiles.map(p =>
+    const opciones = `<option value="">Yo misma</option>` + state.perfiles.map(p =>
       `<option value="${esc(p.id)}"${p.id === ownerId ? ' selected' : ''}>${esc(p.nombre)}</option>`
     ).join('');
     return `<div><label>De quién es</label><select id="${idAttr}">${opciones}</select></div>`;
+  }
+
+  // Lee el selector "De quién es" (si existe, si la persona es admin) y
+  // devuelve el owner_id/agente a usar, o null si se deja el valor por
+  // defecto (quien esté conectada).
+  function ownerFromSelector(idAttr) {
+    const el = document.getElementById(idAttr);
+    if (!el || !el.value) return null;
+    const perfil = state.perfiles.find(p => p.id === el.value);
+    return perfil ? { owner_id: perfil.id, agente: perfil.nombre } : null;
+  }
+
+  const PLANTA_OPCIONES = ['Bajo', 'Entlo', '1ª', '2ª', '3ª', '4ª', '5ª', '6ª o más'];
+
+  // "Ascensor" (Con/Sin/No indica) + "Planta" (solo se muestra si es "Sin
+  // ascensor", que es cuando de verdad importa a compradores/vendedores).
+  function ascensorPlantaHtml(idPrefix, ascensor, planta) {
+    const plantaOpts = `<option value="">Sin especificar</option>` + PLANTA_OPCIONES.map(p =>
+      `<option value="${esc(p)}"${p === planta ? ' selected' : ''}>${esc(p)}</option>`
+    ).join('');
+    return `
+          <div>
+            <label>Ascensor</label>
+            <select id="${idPrefix}-ascensor">
+              <option value="">No indica</option>
+              <option value="si"${ascensor === 'si' ? ' selected' : ''}>Con ascensor</option>
+              <option value="no"${ascensor === 'no' ? ' selected' : ''}>Sin ascensor</option>
+            </select>
+          </div>
+          <div id="${idPrefix}-planta-wrap" style="${ascensor === 'no' ? '' : 'display:none'}">
+            <label>Planta</label>
+            <select id="${idPrefix}-planta">${plantaOpts}</select>
+          </div>`;
+  }
+
+  // Texto corto para la ficha de la lista, p.ej. " · Sin ascensor (3ª)".
+  function ascensorPlantaTexto(c) {
+    if (c.ascensor === 'si') return ' · Con ascensor';
+    if (c.ascensor === 'no') return c.planta ? ` · Sin ascensor (${esc(c.planta)})` : ' · Sin ascensor';
+    return '';
+  }
+
+  function wireAscensorToggle(idPrefix) {
+    const sel = document.getElementById(`${idPrefix}-ascensor`);
+    const wrap = document.getElementById(`${idPrefix}-planta-wrap`);
+    if (!sel || !wrap) return;
+    sel.addEventListener('change', () => { wrap.style.display = sel.value === 'no' ? '' : 'none'; });
+  }
+
+  // Rellena en los formularios "Añadir comprador"/"Añadir vendedor" los
+  // campos de Ascensor/Planta y, si la cuenta es admin, el selector "De
+  // quién es". Se llama al iniciar sesión (para que ya sepamos si es
+  // admin) y también al cerrar sesión (para dejarlos vacíos).
+  function renderAddFormExtras() {
+    ['c', 'v'].forEach(prefix => {
+      const apWrap = document.getElementById(`${prefix}-ascensor-planta-wrap`);
+      if (apWrap) { apWrap.innerHTML = ascensorPlantaHtml(`${prefix}-add`, '', ''); wireAscensorToggle(`${prefix}-add`); }
+      const ownerWrap = document.getElementById(`${prefix}-owner-wrap`);
+      if (ownerWrap) ownerWrap.innerHTML = agenteSelectorHtml(`${prefix}-owner`, currentUser ? currentUser.id : null);
+    });
   }
 
   function renderCompradorEditForm(c) {
@@ -1578,6 +1656,7 @@
           <div><label>Tipo</label><select id="edit-tipo-${c.id}">${tipoOptionsHtml(c.tipo)}</select></div>
           <div><label>Presupuesto máx. (€)</label><input type="number" id="edit-presupuesto-${c.id}" value="${c.presupuesto || ''}"></div>
           <div><label>Nº mín. de habitaciones</label><input type="number" id="edit-habitaciones-min-${c.id}" min="0" value="${c.habitaciones_min || ''}"></div>
+          ${ascensorPlantaHtml(`edit-${c.id}`, c.ascensor, c.planta)}
           <div class="full"><label>Qué busca (otras características)</label><textarea id="edit-caract-${c.id}">${esc(c.caract)}</textarea></div>
           <div class="full"><label>Notas</label><textarea id="edit-notas-${c.id}" placeholder="Anotaciones internas: qué vende, condiciones, avisos...">${esc(c.notas)}</textarea></div>
         </div>
@@ -1593,7 +1672,7 @@
       <li class="item" id="comprador-${c.id}">
         <div class="item-main">
           <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${estadoTagHtml(c.estado)}</div>
-          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}</div>
+          <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}${ascensorPlantaTexto(c)}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           ${c.notas ? `<div class="item-notes"><strong>Notas:</strong> ${esc(c.notas)}</div>` : ''}
           <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
@@ -1626,7 +1705,7 @@
       '<ul class="list">' + visibles.map(c => (c.id === editingCompradorId && editingCompradorTab === tab) ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('') + '</ul>';
     if (editingCompradorId && editingCompradorTab === tab) {
       const c = listaCompleta.find(x => x.id === editingCompradorId);
-      if (c) fillZonaPicker(`edit-zona-picker-${c.id}`, `edit-zona-otra-${c.id}`, c.zona);
+      if (c) { fillZonaPicker(`edit-zona-picker-${c.id}`, `edit-zona-otra-${c.id}`, c.zona); wireAscensorToggle(`edit-${c.id}`); }
     }
     bindDeletes(el);
     el.querySelectorAll('[data-editcomprador]').forEach(btn => {
@@ -1679,6 +1758,8 @@
       tipo: document.getElementById(`edit-tipo-${id}`).value,
       presupuesto: presupuestoVal ? Number(presupuestoVal) : null,
       habitaciones_min: (() => { const v = document.getElementById(`edit-habitaciones-min-${id}`).value; return v ? Number(v) : null; })(),
+      ascensor: document.getElementById(`edit-${id}-ascensor`) ? (document.getElementById(`edit-${id}-ascensor`).value || null) : null,
+      planta: document.getElementById(`edit-${id}-planta`) ? (document.getElementById(`edit-${id}-planta`).value || null) : null,
       caract: document.getElementById(`edit-caract-${id}`).value.trim(),
       notas: document.getElementById(`edit-notas-${id}`).value.trim(),
     };
