@@ -872,21 +872,37 @@
     el.style.display = 'block';
   }
 
+  // Supabase/PostgREST solo devuelve como mucho 1000 filas por consulta aunque
+  // no se pida un .limit(): a partir de esa fila corta la respuesta en
+  // silencio, sin avisar de que hay más. Como ya superamos las 1000 filas en
+  // compradores, hay que pedir los datos por páginas de 1000 y unirlas, o la
+  // app se queda mostrando solo una parte de los clientes.
+  async function fetchAllRows(table, orderCol) {
+    const pageSize = 1000;
+    let from = 0;
+    let all = [];
+    while (true) {
+      const { data, error } = await sb.from(table).select('*').order(orderCol, { ascending: false }).range(from, from + pageSize - 1);
+      if (error) throw error;
+      all = all.concat(data || []);
+      if (!data || data.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
+  }
+
   async function loadAll() {
     try {
-      const [compradoresRes, pisosRes, contactadosRes] = await Promise.all([
-        sb.from('compradores').select('*').order('fecha', { ascending: false }),
-        sb.from('pisos').select('*').order('fecha', { ascending: false }),
-        sb.from('contactados').select('*'),
+      const [compradoresData, pisosData, contactadosData] = await Promise.all([
+        fetchAllRows('compradores', 'fecha'),
+        fetchAllRows('pisos', 'fecha'),
+        sb.from('contactados').select('*').then(r => { if (r.error) throw r.error; return r.data || []; }),
       ]);
-      if (compradoresRes.error) throw compradoresRes.error;
-      if (pisosRes.error) throw pisosRes.error;
-      if (contactadosRes.error) throw contactadosRes.error;
 
-      state.compradores = compradoresRes.data || [];
-      state.pisos = pisosRes.data || [];
+      state.compradores = compradoresData;
+      state.pisos = pisosData;
       state.contactados = {};
-      (contactadosRes.data || []).forEach(r => { state.contactados[r.match_key] = r.fecha; });
+      contactadosData.forEach(r => { state.contactados[r.match_key] = r.fecha; });
 
       checkNewMatchesForNotif(computeMatches());
       showConnError(null);
@@ -898,19 +914,16 @@
     // Alquiler vive en tablas aparte: si todavía no se ha ejecutado el SQL
     // de configuración, esto falla solo, sin tocar Compradores/Pisos/Coincidencias.
     try {
-      const [alqClientesRes, alqPisosRes, alqContactadosRes] = await Promise.all([
-        sb.from('alquiler_clientes').select('*').order('fecha', { ascending: false }),
-        sb.from('alquiler_pisos').select('*').order('fecha', { ascending: false }),
-        sb.from('alquiler_contactados').select('*'),
+      const [alqClientesData, alqPisosData, alqContactadosData] = await Promise.all([
+        fetchAllRows('alquiler_clientes', 'fecha'),
+        fetchAllRows('alquiler_pisos', 'fecha'),
+        sb.from('alquiler_contactados').select('*').then(r => { if (r.error) throw r.error; return r.data || []; }),
       ]);
-      if (alqClientesRes.error) throw alqClientesRes.error;
-      if (alqPisosRes.error) throw alqPisosRes.error;
-      if (alqContactadosRes.error) throw alqContactadosRes.error;
 
-      state.alquilerClientes = alqClientesRes.data || [];
-      state.alquilerPisos = alqPisosRes.data || [];
+      state.alquilerClientes = alqClientesData;
+      state.alquilerPisos = alqPisosData;
       state.alquilerContactados = {};
-      (alqContactadosRes.data || []).forEach(r => { state.alquilerContactados[r.match_key] = r.fecha; });
+      alqContactadosData.forEach(r => { state.alquilerContactados[r.match_key] = r.fecha; });
 
       checkNewMatchesForNotifAlquiler(computeMatchesAlquiler());
       const note = document.getElementById('alquiler-setup-note');
