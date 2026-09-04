@@ -384,3 +384,17 @@ create policy "push_subscriptions_delete" on public.push_subscriptions
 -- ("Bajo", "Entlo", "1ª", "2ª", ...), solo relevante cuando ascensor='no'.
 alter table public.compradores add column if not exists ascensor text;
 alter table public.compradores add column if not exists planta text;
+
+-- ============================================================
+-- Permitir a un admin crear un comprador/vendedor/alquiler
+-- asignándolo directamente a otro compañero ("De quién es" al
+-- crear). Antes el insert exigía owner_id = auth.uid(), así que
+-- un admin no podía insertar una fila a nombre de otra persona.
+-- ============================================================
+drop policy if exists "compradores_insert" on public.compradores;
+create policy "compradores_insert" on public.compradores
+  for insert with check (owner_id = auth.uid() or public.is_admin());
+
+drop policy if exists "alquiler_clientes_insert" on public.alquiler_clientes;
+create policy "alquiler_clientes_insert" on public.alquiler_clientes
+  for insert with check (owner_id = auth.uid() or public.is_admin());
