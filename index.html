@@ -802,6 +802,14 @@
   function esc(s) { return (s || '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function fmtMoney(n) { return n ? Number(n).toLocaleString('es-ES') + ' €' : '—'; }
   function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); } catch(e){ return ''; } }
+  function diasDesde(iso) { if (!iso) return null; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); return d >= 0 ? d : null; }
+  function ultimoContactoTexto(c) {
+    const dias = diasDesde(c.ultimo_contacto || c.fecha);
+    if (dias === null) return '';
+    if (dias === 0) return ' · Contactado hoy';
+    if (dias === 1) return ' · Último contacto: ayer';
+    return ` · Último contacto: hace ${dias} días`;
+  }
   function waLink(telefono, mensaje) {
     let tel = (telefono || '').replace(/[\s-]/g, '');
     if (tel.startsWith('+')) tel = tel.slice(1);
@@ -1450,8 +1458,25 @@
     const { error } = await sb.from('contactados').upsert({ match_key: key, fecha });
     if (error) { console.error(error); showToast('No se pudo guardar'); return; }
     state.contactados[key] = fecha;
+    // El key es "compradorId::pisoId": aprovechamos que ya se contactó a
+    // este comprador para poner al día su "último contacto" general, así
+    // el aviso de "llevas tiempo sin hablar con X" no salta de mentira.
+    const compradorId = key.split('::')[0];
+    marcarUltimoContacto(compradorId, { silencioso: true });
     renderAll();
     showToast('Marcado como contactado');
+  }
+
+  // Botón "Contactado hoy": para cuando se ha hablado con la persona pero
+  // no a raíz de un piso concreto (una llamada de seguimiento, etc.). Pone
+  // al día ultimo_contacto para que el aviso de inactividad no salte.
+  async function marcarUltimoContacto(id, opts) {
+    const fecha = new Date().toISOString();
+    const { error } = await sb.from('compradores').update({ ultimo_contacto: fecha }).eq('id', id);
+    if (error) { console.error(error); if (!opts || !opts.silencioso) showToast('No se pudo guardar'); return; }
+    const c = state.compradores.find(x => x.id === id);
+    if (c) c.ultimo_contacto = fecha;
+    if (!opts || !opts.silencioso) { renderAll(); showToast('Marcado como contactado hoy'); }
   }
 
   async function markContactedBatch(keys) {
@@ -1675,11 +1700,12 @@
           <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}${ascensorPlantaTexto(c)}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           ${c.notas ? `<div class="item-notes"><strong>Notas:</strong> ${esc(c.notas)}</div>` : ''}
-          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
+          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}${ultimoContactoTexto(c)}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
           <select data-quickestado="${c.id}" style="font-size:11px;padding:3px 6px;">${estadoOptionsHtml(c.estado)}</select>
           <button class="ghost" data-editcomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
+          <button class="ghost" data-contactadohoy="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Contactado hoy</button>
           <button class="del" data-list="compradores" data-table="compradores" data-id="${c.id}">Eliminar</button>
         </div>
       </li>`;
@@ -1719,6 +1745,9 @@
     });
     el.querySelectorAll('[data-quickestado]').forEach(sel => {
       sel.addEventListener('change', () => updateCompradorEstado(sel.dataset.quickestado, sel.value));
+    });
+    el.querySelectorAll('[data-contactadohoy]').forEach(btn => {
+      btn.addEventListener('click', () => marcarUltimoContacto(btn.dataset.contactadohoy));
     });
   }
 

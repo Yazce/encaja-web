@@ -398,3 +398,22 @@ create policy "compradores_insert" on public.compradores
 drop policy if exists "alquiler_clientes_insert" on public.alquiler_clientes;
 create policy "alquiler_clientes_insert" on public.alquiler_clientes
   for insert with check (owner_id = auth.uid() or public.is_admin());
+
+-- ============================================================
+-- Aviso de "llevas tiempo sin contactar con este cliente"
+-- ============================================================
+-- ultimo_contacto: se pone al día cada vez que alguien marca una
+-- coincidencia como contactada, o pulsa el botón "Contactado hoy". Si
+-- está vacío, se cuenta desde la fecha en que se creó el contacto
+-- (así no hay que rellenar nada a mano en los que ya existían).
+-- ultimo_aviso_inactividad: cuándo se mandó el último aviso push por
+-- llevar tiempo sin contactar, para no repetirlo cada 6 horas — el
+-- scraper solo vuelve a avisar cuando ya han pasado otros 14 días
+-- desde el aviso anterior.
+-- Los ~5.221 contactos "Importados" (estado sin_revisar) quedan fuera
+-- de este aviso a propósito: son la bolsa de contactos aún sin
+-- repartir entre el equipo, no clientes que alguien esté llevando.
+alter table public.compradores add column if not exists ultimo_contacto timestamptz;
+alter table public.compradores add column if not exists ultimo_aviso_inactividad timestamptz;
+alter table public.alquiler_clientes add column if not exists ultimo_contacto timestamptz;
+alter table public.alquiler_clientes add column if not exists ultimo_aviso_inactividad timestamptz;
