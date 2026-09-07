@@ -378,6 +378,7 @@
     <button data-tab="vendedores">Vendedores <span class="count" id="count-vendedores">0</span></button>
     <button data-tab="pisos">Pisos nuevos <span class="count" id="count-pisos">0</span></button>
     <button data-tab="matches">Coincidencias <span class="count" id="count-matches">0</span></button>
+    <button data-tab="sincontacto">Sin contacto <span class="count" id="count-sincontacto">0</span></button>
     <button data-tab="alquiler">Alquiler <span class="count" id="count-alquiler">0</span></button>
   </nav>
 
@@ -506,6 +507,13 @@
   <section class="panel" id="panel-matches">
     <h2 class="section-title">Coincidencias activas</h2>
     <div id="list-matches"><div class="loading">Cargando…</div></div>
+  </section>
+
+  <!-- SIN CONTACTO: compradores/vendedores activos con 14+ días sin hablar -->
+  <section class="panel" id="panel-sincontacto">
+    <h2 class="section-title">Sin contacto hace tiempo</h2>
+    <div class="hint" style="margin-bottom:12px;">Compradores y vendedores activos con los que llevas 14 días o más sin hablar. Si busca piso, el WhatsApp ya lleva las viviendas que le encajan; si vende, solo pregunta si sigue en pie.</div>
+    <div id="list-sincontacto"><div class="loading">Cargando…</div></div>
   </section>
 
   <!-- ALQUILER (independiente de Compradores/Pisos/Coincidencias de compraventa) -->
@@ -1378,6 +1386,19 @@
     return matches;
   }
 
+  // Mismo umbral que UMBRAL_DIAS en scraper/notify_inactivity.py: 14 días
+  // sin contacto es cuando salta el aviso push y cuando aparece aquí, en la
+  // pestaña "Sin contacto".
+  const UMBRAL_DIAS_INACTIVIDAD = 14;
+
+  function computeStale() {
+    return state.compradores
+      .filter(c => c.estado === 'activo')
+      .map(c => ({ c, dias: diasDesde(c.ultimo_contacto || c.fecha) }))
+      .filter(x => x.dias !== null && x.dias >= UMBRAL_DIAS_INACTIVIDAD)
+      .sort((a, b) => b.dias - a.dias);
+  }
+
   function computeMatchesAlquiler() {
     const matches = [];
     for (const piso of state.alquilerPisos) {
@@ -1586,6 +1607,7 @@
     renderVendedores();
     renderPisos();
     renderMatches(matches);
+    renderSinContacto();
 
     document.getElementById('count-alq-clientes').textContent = state.alquilerClientes.length;
     document.getElementById('count-alq-pisos').textContent = state.alquilerPisos.length;
@@ -2158,6 +2180,45 @@
         markContactedBatch(g.top.map(m => m.key));
         showToast('Marcado como contactado');
       });
+    });
+  }
+
+  // Compradores y vendedores activos con 14+ días sin contacto (mismo
+  // umbral que el aviso push de inactividad). El botón WhatsApp usa
+  // mensajeInactividad(c), que ya decide solo si ofrece pisos (comprador)
+  // o solo pregunta si sigue vendiendo (vendedor).
+  function renderSinContacto() {
+    const el = document.getElementById('list-sincontacto');
+    const stale = computeStale();
+    document.getElementById('count-sincontacto').textContent = stale.length;
+    if (!stale.length) {
+      el.innerHTML = emptyState('Nadie lleva 14 días o más sin contacto ahora mismo. 🎉');
+      return;
+    }
+    el.innerHTML = stale.map(({ c, dias }) => `
+      <div class="match-group" id="sincontacto-${c.id}">
+        <div class="match-group-header">
+          <div>
+            <div class="match-group-name">${esc(c.nombre)}${rolTagHtml(c.rol)}</div>
+            <div class="match-group-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'cualquier zona'}${c.rol !== 'vendedor' ? ` · <span class="num">${fmtMoney(c.presupuesto)}</span>` : ''}</div>
+            <div class="item-by">Comercial: ${esc(c.agente) || 'sin asignar'} · hace ${dias} días sin contacto</div>
+          </div>
+        </div>
+        <div class="match-group-actions">
+          <button class="primary" data-wasincontacto="${c.id}">📲 Enviar WhatsApp</button>
+          <button class="ghost done" data-donesincontacto="${c.id}">Marcar como contactado</button>
+        </div>
+      </div>`).join('');
+
+    el.querySelectorAll('[data-wasincontacto]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c = state.compradores.find(x => x.id === btn.dataset.wasincontacto);
+        if (!c) return;
+        window.open(waLink(c.telefono, mensajeInactividad(c)), '_blank');
+      });
+    });
+    el.querySelectorAll('[data-donesincontacto]').forEach(btn => {
+      btn.addEventListener('click', () => marcarUltimoContacto(btn.dataset.donesincontacto));
     });
   }
 
