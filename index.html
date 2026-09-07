@@ -822,6 +822,15 @@
   // abierto por un toque real de la persona: los enlaces de WhatsApp
   // abiertos automáticamente desde el aviso (sin toque directo en la
   // página) no abren la app en Android, se quedan en la web.
+  //
+  // Para compradores, además de preguntar si sigue buscando, se incluyen
+  // ya las viviendas activas que encajen con lo que pedía (misma lógica
+  // de encaje — zonaMatches/tipo/presupuesto — que usa la pestaña
+  // "Coincidencias"), para no tener que ir a mirar aparte si hay algo que
+  // ofrecerle. zonaMatches, matchScore, caractSinUrl y
+  // MAX_PISOS_POR_MENSAJE se definen más abajo en este mismo archivo,
+  // pero al ser funciones/const de nivel superior ya están listas para
+  // cuando esta función se llame de verdad (al tocar el botón).
   function mensajeInactividad(c) {
     const dias = diasDesde(c.ultimo_contacto || c.fecha);
     const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
@@ -829,7 +838,27 @@
     if (c.rol === 'vendedor') {
       return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? Cuéntame cómo lo llevas.`;
     }
-    return `${saludo}¿sigues buscando piso? Cuéntame cómo lo llevas, a ver si te puedo ayudar en algo.`;
+    const candidatos = (state.pisos || []).filter(p => {
+      if (p.reservado) return false;
+      if (!zonaMatches(p.zona, c.zona)) return false;
+      if (c.tipo && p.tipo && c.tipo !== p.tipo) return false;
+      if (c.presupuesto && p.precio && p.precio > c.presupuesto) return false;
+      return true;
+    });
+    if (!candidatos.length) {
+      return `${saludo}¿sigues buscando piso? Cuéntame cómo lo llevas, a ver si te puedo ayudar en algo.`;
+    }
+    candidatos.sort((a, b) => matchScore({ comprador: c, piso: b }) - matchScore({ comprador: c, piso: a }));
+    let msg = `${saludo}¿sigues buscando piso? Mira, tengo estas viviendas que pueden encajarte:\n\n`;
+    candidatos.slice(0, MAX_PISOS_POR_MENSAJE).forEach((p, i) => {
+      msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}\n`;
+      const chars = caractSinUrl(p);
+      if (chars) msg += `${chars.slice(0, 90)}\n`;
+      if (p.url) msg += `${p.url}\n`;
+      msg += '\n';
+    });
+    msg += '¿Te sigue interesando alguna, o ha cambiado lo que buscas?';
+    return msg;
   }
 
   // ---- Zonas reales (mismas que aparecen en los pisos de la web) ----
