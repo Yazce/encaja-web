@@ -51,13 +51,50 @@ self.addEventListener('push', (event) => {
     badge: '/icon-192.png',
     tag: data.tag || 'encaja-generic',
     data: { url: data.url || '/' },
+    // Para que un aviso importante (cliente en caliente, recordatorio de
+    // inactividad) no pase desapercibido: que vibre, que suene (silent:
+    // false es lo normal, pero lo dejamos explícito) y que se quede en
+    // pantalla hasta que alguien lo toque, en vez de desaparecer solo.
+    vibrate: [200, 100, 200, 100, 200],
+    requireInteraction: true,
+    silent: false,
+    renotify: true,
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+// Construye, solo para Android, un enlace "intent://" que pide abrir
+// directamente WhatsApp Business (com.whatsapp.w4b, que es la app que
+// usamos en la oficina) en vez de dejar que el enlace https://wa.me/...
+// caiga en la página web de "Descargar WhatsApp" (esa página solo
+// reconoce el WhatsApp normal, no el Business). Si el aviso apunta a
+// otra cosa que no sea WhatsApp, o si no estamos en Android, se deja
+// el enlace tal cual.
+function urlParaAbrir(url) {
+  const esWhatsApp = /^https:\/\/(wa\.me|api\.whatsapp\.com\/send)/.test(url);
+  if (!esWhatsApp) return url;
+  const esAndroid = /Android/i.test((self.navigator && self.navigator.userAgent) || '');
+  if (!esAndroid) return url;
+  const resto = url.replace(/^https:\/\/wa\.me\//, '').replace(/^https:\/\/api\.whatsapp\.com\/send\?/, '?');
+  return `intent://send/${resto}#Intent;scheme=https;package=com.whatsapp.w4b;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
+  const esWhatsApp = /^https:\/\/(wa\.me|api\.whatsapp\.com\/send)/.test(url);
+  const destino = urlParaAbrir(url);
+
+  if (esWhatsApp) {
+    // Los enlaces de WhatsApp siempre se abren en una ventana/pestaña
+    // nueva: si en vez de eso navegamos una pestaña de Encaja que ya
+    // estaba abierta (con client.navigate), Android no lo trata como
+    // una apertura de enlace de verdad y no ofrece abrir la app, así
+    // que se queda en la página web y pide instalar WhatsApp.
+    event.waitUntil(self.clients.openWindow(destino));
+    return;
+  }
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
       for (const client of clientsArr) {
@@ -68,12 +105,12 @@ self.addEventListener('notificationclick', (event) => {
           // la navegamos primero a la URL del aviso (con el comprador) y
           // luego la enfocamos.
           if ('navigate' in client) {
-            return client.navigate(url).then((c) => (c || client).focus()).catch(() => client.focus());
+            return client.navigate(destino).then((c) => (c || client).focus()).catch(() => client.focus());
           }
           return client.focus();
         }
       }
-      if (self.clients.openWindow) return self.clients.openWindow(url);
+      if (self.clients.openWindow) return self.clients.openWindow(destino);
     })
   );
 });
