@@ -70,13 +70,24 @@ self.addEventListener('push', (event) => {
 // reconoce el WhatsApp normal, no el Business). Si el aviso apunta a
 // otra cosa que no sea WhatsApp, o si no estamos en Android, se deja
 // el enlace tal cual.
+//
+// Usa el esquema propio "whatsapp://send?phone=...&text=..." (el que
+// documenta el propio WhatsApp para enlaces "Click to Chat"), envuelto
+// en un intent:// que fuerza el paquete com.whatsapp.w4b. La primera
+// versión usaba el esquema "https" con el dominio wa.me, pero esa
+// verificación de dominio (Android App Links) solo está registrada
+// para el WhatsApp normal, no para el Business, así que nunca abría
+// la app: se quedaba en la web. Con el esquema propio de WhatsApp no
+// hace falta esa verificación.
 function urlParaAbrir(url) {
-  const esWhatsApp = /^https:\/\/(wa\.me|api\.whatsapp\.com\/send)/.test(url);
-  if (!esWhatsApp) return url;
+  const m = /^https:\/\/wa\.me\/([0-9+]+)(?:\?text=(.*))?$/.exec(url) ||
+            /^https:\/\/api\.whatsapp\.com\/send\?phone=([0-9+]+)(?:&text=(.*))?$/.exec(url);
+  if (!m) return url;
   const esAndroid = /Android/i.test((self.navigator && self.navigator.userAgent) || '');
   if (!esAndroid) return url;
-  const resto = url.replace(/^https:\/\/wa\.me\//, '').replace(/^https:\/\/api\.whatsapp\.com\/send\?/, '?');
-  return `intent://send/${resto}#Intent;scheme=https;package=com.whatsapp.w4b;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+  const tel = m[1];
+  const textoParam = m[2] ? `&text=${m[2]}` : '';
+  return `intent://send?phone=${tel}${textoParam}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url=${encodeURIComponent(url)};end`;
 }
 
 self.addEventListener('notificationclick', (event) => {
