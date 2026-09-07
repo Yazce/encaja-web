@@ -63,22 +63,18 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// Construye, solo para Android, un enlace "intent://" que pide abrir
-// directamente WhatsApp Business (com.whatsapp.w4b, que es la app que
-// usamos en la oficina) en vez de dejar que el enlace https://wa.me/...
-// caiga en la página web de "Descargar WhatsApp" (esa página solo
-// reconoce el WhatsApp normal, no el Business). Si el aviso apunta a
-// otra cosa que no sea WhatsApp, o si no estamos en Android, se deja
-// el enlace tal cual.
+// En Android, cambia el enlace https://wa.me/... por el esquema propio
+// de WhatsApp (whatsapp://send?phone=...&text=...) para que Android lo
+// mande directo a la app en vez de a la página web.
 //
-// Usa el esquema propio "whatsapp://send?phone=...&text=..." (el que
-// documenta el propio WhatsApp para enlaces "Click to Chat"), envuelto
-// en un intent:// que fuerza el paquete com.whatsapp.w4b. La primera
-// versión usaba el esquema "https" con el dominio wa.me, pero esa
-// verificación de dominio (Android App Links) solo está registrada
-// para el WhatsApp normal, no para el Business, así que nunca abría
-// la app: se quedaba en la web. Con el esquema propio de WhatsApp no
-// hace falta esa verificación.
+// Ya se probó forzando el paquete com.whatsapp.w4b (Business) con un
+// envoltorio intent://, dos veces (con wa.me y con whatsapp://send) y
+// las dos veces terminó cayendo igualmente en la web — parece que ese
+// forzado de paquete no cuadra con cómo Business registra el enlace en
+// este móvil. Esta versión es más simple: sin intent:// ni paquete
+// forzado, solo el esquema whatsapp:// tal cual. Si Business es la
+// única app de WhatsApp instalada, Android no tiene que elegir entre
+// varias y debería abrirla directamente sin preguntar.
 function urlParaAbrir(url) {
   const m = /^https:\/\/wa\.me\/([0-9+]+)(?:\?text=(.*))?$/.exec(url) ||
             /^https:\/\/api\.whatsapp\.com\/send\?phone=([0-9+]+)(?:&text=(.*))?$/.exec(url);
@@ -87,7 +83,7 @@ function urlParaAbrir(url) {
   if (!esAndroid) return url;
   const tel = m[1];
   const textoParam = m[2] ? `&text=${m[2]}` : '';
-  return `intent://send?phone=${tel}${textoParam}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+  return `whatsapp://send?phone=${tel}${textoParam}`;
 }
 
 self.addEventListener('notificationclick', (event) => {
