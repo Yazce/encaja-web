@@ -842,7 +842,13 @@
   function mensajeInactividad(c) {
     const dias = diasDesde(c.ultimo_contacto || c.fecha);
     const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
-    const saludo = `Hola ${c.nombre}, soy de Inmoparadise 👋 ${cuando ? `Hablamos ${cuando}, ` : ''}`;
+    // Sin emoji: el 👋 (fuera del plano básico de Unicode) llega roto como
+    // un carácter de reemplazo (�) al mensaje real de WhatsApp al pasar
+    // por la redirección de wa.me — comprobado abriendo el enlace de
+    // verdad, no solo mirando el texto en la app. El resto de mensajes de
+    // la app (Coincidencias) tampoco usan emoji, así que queda igual de
+    // consistente sin él.
+    const saludo = `Hola ${c.nombre}, soy de Inmoparadise. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
     if (c.rol === 'vendedor') {
       return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? Cuéntame cómo lo llevas.`;
     }
