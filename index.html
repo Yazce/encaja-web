@@ -816,6 +816,21 @@
     if (!tel.startsWith('34')) tel = '34' + tel;
     return `https://wa.me/${tel}?text=${encodeURIComponent(mensaje)}`;
   }
+  // Mensaje de "hace tiempo que no hablamos" para el botón WhatsApp de la
+  // ficha (el mismo estilo que manda el aviso push de inactividad). Se
+  // genera aquí, al momento de tocar el botón, para que sea un enlace
+  // abierto por un toque real de la persona: los enlaces de WhatsApp
+  // abiertos automáticamente desde el aviso (sin toque directo en la
+  // página) no abren la app en Android, se quedan en la web.
+  function mensajeInactividad(c) {
+    const dias = diasDesde(c.ultimo_contacto || c.fecha);
+    const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
+    const saludo = `Hola ${c.nombre}, soy de Inmoparadise 👋 ${cuando ? `Hablamos ${cuando}, ` : ''}`;
+    if (c.rol === 'vendedor') {
+      return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? Cuéntame cómo lo llevas.`;
+    }
+    return `${saludo}¿sigues buscando piso? Cuéntame cómo lo llevas, a ver si te puedo ayudar en algo.`;
+  }
 
   // ---- Zonas reales (mismas que aparecen en los pisos de la web) ----
   // Lista tomada de los valores de zona ya existentes en la tabla de pisos,
@@ -1705,6 +1720,7 @@
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
           <select data-quickestado="${c.id}" style="font-size:11px;padding:3px 6px;">${estadoOptionsHtml(c.estado)}</select>
           <button class="ghost" data-editcomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
+          <button class="ghost" data-wacomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">WhatsApp</button>
           <button class="ghost" data-contactadohoy="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Contactado hoy</button>
           <button class="del" data-list="compradores" data-table="compradores" data-id="${c.id}">Eliminar</button>
         </div>
@@ -1748,6 +1764,13 @@
     });
     el.querySelectorAll('[data-contactadohoy]').forEach(btn => {
       btn.addEventListener('click', () => marcarUltimoContacto(btn.dataset.contactadohoy));
+    });
+    el.querySelectorAll('[data-wacomprador]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c = listaCompleta.find(x => x.id === btn.dataset.wacomprador);
+        if (!c) return;
+        window.open(waLink(c.telefono, mensajeInactividad(c)), '_blank');
+      });
     });
   }
 

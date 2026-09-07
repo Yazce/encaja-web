@@ -63,45 +63,19 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// En Android, cambia el enlace https://wa.me/... por el esquema propio
-// de WhatsApp (whatsapp://send?phone=...&text=...) para que Android lo
-// mande directo a la app en vez de a la página web.
-//
-// Ya se probó forzando el paquete com.whatsapp.w4b (Business) con un
-// envoltorio intent://, dos veces (con wa.me y con whatsapp://send) y
-// las dos veces terminó cayendo igualmente en la web — parece que ese
-// forzado de paquete no cuadra con cómo Business registra el enlace en
-// este móvil. Esta versión es más simple: sin intent:// ni paquete
-// forzado, solo el esquema whatsapp:// tal cual. Si Business es la
-// única app de WhatsApp instalada, Android no tiene que elegir entre
-// varias y debería abrirla directamente sin preguntar.
-function urlParaAbrir(url) {
-  const m = /^https:\/\/wa\.me\/([0-9+]+)(?:\?text=(.*))?$/.exec(url) ||
-            /^https:\/\/api\.whatsapp\.com\/send\?phone=([0-9+]+)(?:&text=(.*))?$/.exec(url);
-  if (!m) return url;
-  const esAndroid = /Android/i.test((self.navigator && self.navigator.userAgent) || '');
-  if (!esAndroid) return url;
-  const tel = m[1];
-  const textoParam = m[2] ? `&text=${m[2]}` : '';
-  return `whatsapp://send?phone=${tel}${textoParam}`;
-}
-
+// Nota sobre WhatsApp: se probó (tres veces, con distintos enlaces
+// intent:// y whatsapp://) hacer que el propio aviso abriera WhatsApp
+// Business directamente al pinchar la notificación, y ninguna funcionó
+// de fiar: un enlace de WhatsApp abierto automáticamente por el
+// service worker (sin que la persona lo toque ella misma dentro de una
+// página) no abre la app en Android, se queda en la web. Por eso ahora
+// los avisos (tanto los de coincidencia de piso como los de
+// inactividad) llevan a la ficha del contacto dentro de la propia
+// Encaja ("/?comprador=<id>"), donde sí hay un botón "WhatsApp" real
+// que, al tocarlo la persona misma, abre la app correctamente.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
-  const esWhatsApp = /^https:\/\/(wa\.me|api\.whatsapp\.com\/send)/.test(url);
-  const destino = urlParaAbrir(url);
-
-  if (esWhatsApp) {
-    // Los enlaces de WhatsApp siempre se abren en una ventana/pestaña
-    // nueva: si en vez de eso navegamos una pestaña de Encaja que ya
-    // estaba abierta (con client.navigate), Android no lo trata como
-    // una apertura de enlace de verdad y no ofrece abrir la app, así
-    // que se queda en la página web y pide instalar WhatsApp.
-    event.waitUntil(self.clients.openWindow(destino));
-    return;
-  }
-
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
       for (const client of clientsArr) {
@@ -112,12 +86,12 @@ self.addEventListener('notificationclick', (event) => {
           // la navegamos primero a la URL del aviso (con el comprador) y
           // luego la enfocamos.
           if ('navigate' in client) {
-            return client.navigate(destino).then((c) => (c || client).focus()).catch(() => client.focus());
+            return client.navigate(url).then((c) => (c || client).focus()).catch(() => client.focus());
           }
           return client.focus();
         }
       }
-      if (self.clients.openWindow) return self.clients.openWindow(destino);
+      if (self.clients.openWindow) return self.clients.openWindow(url);
     })
   );
 });
