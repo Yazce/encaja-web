@@ -844,7 +844,7 @@
   // cuando esta función se llame de verdad (al tocar el botón).
   function mensajeInactividad(c) {
     const dias = diasDesde(c.ultimo_contacto || c.fecha);
-    const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : `hace ${dias} días`;
+const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : dias < 7 ? 'hace unos días' : 'hace un tiempo';
     // Sin emoji: el 👋 (fuera del plano básico de Unicode) llega roto como
     // un carácter de reemplazo (�) al mensaje real de WhatsApp al pasar
     // por la redirección de wa.me — comprobado abriendo el enlace de
