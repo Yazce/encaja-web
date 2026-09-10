@@ -818,6 +818,9 @@
     if (dias === 1) return ' · Último contacto: ayer';
     return ` · Último contacto: hace ${dias} días`;
   }
+  function nombreCorto(nombre) {
+        return (nombre || '').split(/\s+(?:compra|vende|alquila)\b/i)[0].trim();
+  }
   function waLink(telefono, mensaje) {
     let tel = (telefono || '').replace(/[\s-]/g, '');
     if (tel.startsWith('+')) tel = tel.slice(1);
@@ -848,7 +851,7 @@
     // verdad, no solo mirando el texto en la app. El resto de mensajes de
     // la app (Coincidencias) tampoco usan emoji, así que queda igual de
     // consistente sin él.
-    const saludo = `Hola ${c.nombre}, soy de Inmoparadise. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
+    const saludo = `Hola ${nombreCorto(c.nombre)}, soy de Inmoparadise. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
     if (c.rol === 'vendedor') {
       return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? Cuéntame cómo lo llevas.`;
     }
@@ -1499,7 +1502,7 @@
   }
 
   function buildMessage(comprador, piso) {
-    let msg = `Hola ${comprador.nombre}, soy de Inmoparadise. Ha entrado un piso en ${piso.zona}`;
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. Ha entrado un piso en ${piso.zona}`;
     if (piso.tipo) msg += ` (${piso.tipo.toLowerCase()})`;
     msg += ` que puede encajar con lo que buscas`;
     if (piso.precio) msg += `: ${fmtMoney(piso.precio)}`;
@@ -1511,7 +1514,7 @@
   }
 
   function buildGroupMessage(comprador, list) {
-    let msg = `Hola ${comprador.nombre}, soy de Inmoparadise. Tenemos estas viviendas que encajan con lo que buscas:\n\n`;
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. Tenemos estas viviendas que encajan con lo que buscas:\n\n`;
     list.forEach((m, i) => {
       const p = m.piso;
       msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}\n`;
