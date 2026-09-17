@@ -823,6 +823,26 @@
   }
 
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  // Aviso de posible duplicado al dar de alta (comprador o vendedor: misma
+  // tabla). No fusiona ni borra nada -- solo avisa si ya existe alguien con
+  // ese mismo telefono, para que quien lo da de alta decida si de verdad
+  // hace falta una ficha nueva o si ya existe la de otro companero.
+  function normalizaTelefono(tel) { return (tel || '').replace(/\D/g, ''); }
+  function buscaCompradorPorTelefono(telefono) {
+    const tel = normalizaTelefono(telefono);
+    if (!tel) return null;
+    return state.compradores.find(c => normalizaTelefono(c.telefono) === tel) || null;
+  }
+  function avisaSiTelefonoDuplicado(telefono) {
+    const dup = buscaCompradorPorTelefono(telefono);
+    if (!dup) return true; // no hay coincidencia, se puede seguir
+    const estadoLabel = (ESTADO_OPCIONES.find(o => o.value === dup.estado) || ESTADO_OPCIONES[0]).label;
+    return confirm(
+      `Ya existe un contacto con este telefono: "${dup.nombre}" (de ${dup.agente || 'sin agente'}, estado: ${estadoLabel}).\n\n` +
+      `Aceptar crea una ficha NUEVA de todas formas (quedaran las dos).\n` +
+      `Cancelar no guarda nada -- revisa primero el contacto que ya existe.`
+    );
+  }
 function esc(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function fmtMoney(n) { return n ? Number(n).toLocaleString('es-ES') + ' €' : '—'; }
   function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('es-ES', {day:'2-digit', month:'short'}); } catch(e){ return ''; } }
@@ -1283,6 +1303,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       agente: currentAgentName(),
       fecha: new Date().toISOString(),
     };
+    if (!avisaSiTelefonoDuplicado(item.telefono)) return;
     const ownerOverride = ownerFromSelector('c-owner');
     if (ownerOverride) { item.owner_id = ownerOverride.owner_id; item.agente = ownerOverride.agente; }
     const { error } = await sb.from('compradores').insert(item);
@@ -1314,6 +1335,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       agente: currentAgentName(),
       fecha: new Date().toISOString(),
     };
+    if (!avisaSiTelefonoDuplicado(item.telefono)) return;
     const ownerOverride = ownerFromSelector('v-owner');
     if (ownerOverride) { item.owner_id = ownerOverride.owner_id; item.agente = ownerOverride.agente; }
     const { error } = await sb.from('compradores').insert(item);
