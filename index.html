@@ -197,6 +197,13 @@
   .estado-descartado { background: #EFEFEF; color: #777; border: 1px solid #DDD; }
   .estado-cerrado { background: var(--accent); color: #fff; }
   .estado-sin_revisar { background: #E6EEFC; color: #2255A4; border: 1px solid #C7D9F4; }
+  /* Resalta la fila cuando toca contactar (hoy o ya pasada la fecha). */
+  li.item.para-contactar-hoy { border: 1px solid var(--coral); background: #FBF1EC; }
+  .contactar-tag {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+    padding: 1px 6px; border-radius: 8px; margin-left: 6px; vertical-align: middle;
+    background: var(--coral); color: #fff;
+  }
   .subsection-title {
     font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
     font-size: 15px; font-weight: 600; color: var(--ink); margin: 0 0 10px;
@@ -425,6 +432,9 @@
     <div style="height:20px"></div>
     <h2 class="section-title">Lista de compradores</h2>
     <input type="text" id="compradores-filtro" placeholder="Buscar por nombre, teléfono, zona..." style="margin-bottom:12px;">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);margin-bottom:12px;">
+      <input type="checkbox" id="compradores-ver-todos"> Ver también contactos anteriores a 2026
+    </label>
     <div id="list-compradores"><div class="loading">Cargando…</div></div>
   </section>
 
@@ -511,8 +521,8 @@
 
   <!-- SIN CONTACTO: compradores/vendedores activos con 14+ días sin hablar -->
   <section class="panel" id="panel-sincontacto">
-    <h2 class="section-title">Sin contacto hace tiempo</h2>
-    <div class="hint" style="margin-bottom:12px;">Compradores y vendedores activos con los que llevas 14 días o más sin hablar. Si busca piso, el WhatsApp ya lleva las viviendas que le encajan; si vende, solo pregunta si sigue en pie.</div>
+    <h2 class="section-title">Para contactar hoy</h2>
+    <div class="hint" style="margin-bottom:12px;">Compradores y vendedores activos cuya "próxima fecha de contacto" ya ha llegado (o, si no se puso ninguna, llevan 14 días o más sin hablar). Si busca piso, el WhatsApp ya lleva las viviendas que le encajan; si vende, solo pregunta si sigue en pie. Marca "Cerrado" o "Descartado" en un contacto para que deje de aparecer aquí y de avisar.</div>
     <div id="list-sincontacto"><div class="loading">Cargando…</div></div>
   </section>
 
@@ -638,6 +648,7 @@
   let editingAlqClienteId = null;
   let pisosFiltroText = '';
   let compradoresFiltroText = '';
+  let compradoresVerTodos = false;
   let vendedoresFiltroText = '';
   let alqClientesFiltroText = '';
   let expandedMatchKey = null;
@@ -817,6 +828,33 @@ function esc(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&
     if (dias === 0) return ' · Contactado hoy';
     if (dias === 1) return ' · Último contacto: ayer';
     return ` · Último contacto: hace ${dias} días`;
+  }
+  // "Próxima fecha de contacto": si la persona la puso a mano, se respeta
+  // tal cual. Si no, se calcula sola a partir del último contacto (o de la
+  // fecha de alta si nunca se marcó ninguno) + UMBRAL_DIAS_INACTIVIDAD, que
+  // es el mismo criterio que ya usaba "Sin contacto hace tiempo" — así, a
+  // quien no le toques nada, le sigue funcionando exactamente igual que
+  // hasta ahora.
+  function proximoContactoEfectivo(c) {
+    if (c.proxima_contacto) return c.proxima_contacto;
+    const base = c.ultimo_contacto || c.fecha;
+    if (!base) return null;
+    const d = new Date(base);
+    d.setDate(d.getDate() + UMBRAL_DIAS_INACTIVIDAD);
+    return d.toISOString().slice(0, 10);
+  }
+  function estaParaContactarHoy(c) {
+    if (c.estado !== 'activo') return false; // cerrado/descartado/etc: a propósito, no es que se haya olvidado
+    const fecha = proximoContactoEfectivo(c);
+    if (!fecha) return false;
+    return fecha <= new Date().toISOString().slice(0, 10);
+  }
+  function proximaContactoTexto(c) {
+    if (!c.proxima_contacto) return '';
+    const f = fmtDate(c.proxima_contacto);
+    return c.proxima_contacto <= new Date().toISOString().slice(0, 10)
+      ? ` · Próximo contacto: ${f} (hoy o ya pasado)`
+      : ` · Próximo contacto: ${f}`;
   }
   function nombreCorto(nombre) {
         return (nombre || '').split(/\s+(?:compra|vende|alquila)\b/i)[0].trim();
@@ -1207,6 +1245,11 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     renderCompradores();
   });
 
+  document.getElementById('compradores-ver-todos').addEventListener('change', (e) => {
+    compradoresVerTodos = e.target.checked;
+    renderCompradores();
+  });
+
   document.getElementById('vendedores-filtro').addEventListener('input', (e) => {
     vendedoresFiltroText = e.target.value;
     renderVendedores();
@@ -1404,8 +1447,8 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     return state.compradores
       .filter(c => c.estado === 'activo')
       .map(c => ({ c, dias: diasDesde(c.ultimo_contacto || c.fecha) }))
-      .filter(x => x.dias !== null && x.dias >= UMBRAL_DIAS_INACTIVIDAD)
-      .sort((a, b) => b.dias - a.dias);
+      .filter(x => estaParaContactarHoy(x.c))
+      .sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
   }
 
   function computeMatchesAlquiler() {
@@ -1655,8 +1698,8 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     { value: 'activo', label: 'Activo' },
     { value: 'sin_revisar', label: 'Sin revisar' },
     { value: 'en_visita', label: 'En visita' },
-    { value: 'descartado', label: 'Descartado' },
-    { value: 'cerrado', label: 'Cerrado' },
+    { value: 'descartado', label: 'Descartado (ya no interesa)' },
+    { value: 'cerrado', label: 'Cerrado (vendido/comprado)' },
   ];
   function estadoOptionsHtml(selected) {
     return ESTADO_OPCIONES.map(o =>
@@ -1747,6 +1790,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
           <div><label>Teléfono</label><input type="tel" id="edit-telefono-${c.id}" value="${esc(c.telefono)}"></div>
           <div><label>Es</label><select id="edit-rol-${c.id}">${rolOptionsHtml(c.rol)}</select></div>
           <div><label>Estado</label><select id="edit-estado-${c.id}">${estadoOptionsHtml(c.estado)}</select></div>
+          <div><label>Próxima fecha de contacto</label><input type="date" id="edit-proxima-${c.id}" value="${c.proxima_contacto || ''}"></div>
           ${agenteSelectorHtml(`edit-owner-${c.id}`, c.owner_id)}
           <div class="full">
             <label>Zona(s) que busca</label>
@@ -1768,14 +1812,15 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   }
 
   function compradorRowHtml(c) {
+    const paraContactarHoy = estaParaContactarHoy(c);
     return `
-      <li class="item" id="comprador-${c.id}">
+      <li class="item${paraContactarHoy ? ' para-contactar-hoy' : ''}" id="comprador-${c.id}">
         <div class="item-main">
-          <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${estadoTagHtml(c.estado)}</div>
+          <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${estadoTagHtml(c.estado)}${paraContactarHoy ? '<span class="contactar-tag">Para contactar hoy</span>' : ''}</div>
           <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}${ascensorPlantaTexto(c)}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           ${c.notas ? `<div class="item-notes"><strong>Notas:</strong> ${esc(c.notas)}</div>` : ''}
-          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}${ultimoContactoTexto(c)}</div>
+          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}${ultimoContactoTexto(c)}${proximaContactoTexto(c)}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
           <select data-quickestado="${c.id}" style="font-size:11px;padding:3px 6px;">${estadoOptionsHtml(c.estado)}</select>
@@ -1834,6 +1879,13 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     });
   }
 
+  const FECHA_CORTE_ANTIGUOS = '2026-01-01';
+  // Filtro puramente visual: nunca se borra ni deja de traer de Supabase
+  // ningún contacto antiguo, solo se ocultan de esta lista por defecto.
+  function esContactoReciente(c) {
+    return !c.fecha || c.fecha >= FECHA_CORTE_ANTIGUOS;
+  }
+
   function renderCompradores() {
     renderListaPersonas({
       containerId: 'list-compradores',
@@ -1841,7 +1893,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       textoFiltroRaw: compradoresFiltroText,
       tab: 'compradores',
       emptyMsg: 'Todavía no hay compradores en la lista. Añade el primero para empezar a encontrarles piso.',
-      mostrarEnLista: c => c.rol !== 'vendedor',
+      mostrarEnLista: c => c.rol !== 'vendedor' && (compradoresVerTodos || esContactoReciente(c)),
     });
   }
 
@@ -1874,6 +1926,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       planta: document.getElementById(`edit-${id}-planta`) ? (document.getElementById(`edit-${id}-planta`).value || null) : null,
       caract: document.getElementById(`edit-caract-${id}`).value.trim(),
       notas: document.getElementById(`edit-notas-${id}`).value.trim(),
+      proxima_contacto: document.getElementById(`edit-proxima-${id}`) ? (document.getElementById(`edit-proxima-${id}`).value || null) : null,
     };
     const ownerSel = document.getElementById(`edit-owner-${id}`);
     if (ownerSel) {
