@@ -654,6 +654,8 @@
   let pisosFiltroText = '';
   let compradoresFiltroText = '';
   let compradoresVerTodos = false;
+  const LIMITE_LISTA_INICIAL = 80;
+  const mostrarTodosPorTab = {};
   let vendedoresFiltroText = '';
   let alqClientesFiltroText = '';
   let expandedMatchKey = null;
@@ -1870,13 +1872,20 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       return;
     }
     const textoFiltro = norm(textoFiltroRaw);
-    const visibles = listaCompleta.filter(c => mostrarEnLista(c) && personaMatchesFiltro(c, textoFiltro));
-    if (!visibles.length) {
+    const visiblesCompletos = listaCompleta.filter(c => mostrarEnLista(c) && personaMatchesFiltro(c, textoFiltro));
+    if (!visiblesCompletos.length) {
       el.innerHTML = emptyState('Nadie coincide con la búsqueda.');
       return;
     }
+    // Con miles de contactos, pintar TODOS de golpe es lo que va lento en el
+    // móvil. Si no hay texto de búsqueda, solo pintamos los primeros
+    // LIMITE_LISTA_INICIAL y dejamos un botón para ver el resto -- nada se
+    // oculta de la base de datos, solo del DOM hasta que se pida.
+    const limitando = !textoFiltro && !mostrarTodosPorTab[tab] && visiblesCompletos.length > LIMITE_LISTA_INICIAL;
+    const visibles = limitando ? visiblesCompletos.slice(0, LIMITE_LISTA_INICIAL) : visiblesCompletos;
     el.innerHTML = (textoFiltro ? `<div class="hint" style="margin-bottom:8px;">${visibles.length} de ${listaCompleta.filter(mostrarEnLista).length}</div>` : '') +
-      '<ul class="list">' + visibles.map(c => (c.id === editingCompradorId && editingCompradorTab === tab) ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('') + '</ul>';
+      '<ul class="list">' + visibles.map(c => (c.id === editingCompradorId && editingCompradorTab === tab) ? renderCompradorEditForm(c) : compradorRowHtml(c)).join('') + '</ul>' +
+      (limitando ? `<button class="ghost" data-mostrartodos="${tab}" style="margin-top:12px;width:100%;">Mostrar los ${visiblesCompletos.length} restantes</button>` : '');
     if (editingCompradorId && editingCompradorTab === tab) {
       const c = listaCompleta.find(x => x.id === editingCompradorId);
       if (c) { fillZonaPicker(`edit-zona-picker-${c.id}`, `edit-zona-otra-${c.id}`, c.zona); wireAscensorToggle(`edit-${c.id}`); }
@@ -1896,6 +1905,13 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     });
     el.querySelectorAll('[data-contactadohoy]').forEach(btn => {
       btn.addEventListener('click', () => marcarUltimoContacto(btn.dataset.contactadohoy));
+    });
+    el.querySelectorAll('[data-mostrartodos]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        mostrarTodosPorTab[btn.dataset.mostrartodos] = true;
+        renderCompradores();
+        renderVendedores();
+      });
     });
     el.querySelectorAll('[data-wacomprador]').forEach(btn => {
       btn.addEventListener('click', () => {
