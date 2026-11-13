@@ -380,7 +380,7 @@
 
   <div class="privacy-note">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
-    Estos datos se comparten con todo el equipo que tenga este enlace.
+    Cada comercial ve solo sus compradores, vendedores y clientes de alquiler; administración ve todos. El catálogo de pisos es común.
   </div>
 
   <div id="conn-error" class="conn-error" style="display:none;"></div>
@@ -1227,6 +1227,20 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   })();
 
   document.getElementById('btn-logout').addEventListener('click', async () => {
+    // Retira el aviso push de ESTE dispositivo antes de cerrar sesión, para
+    // que los avisos de esta cuenta no sigan llegando a quien use el equipo
+    // después (y para que esa persona pueda registrar los suyos). Si algo
+    // falla, no impide cerrar sesión.
+    try {
+      if ('serviceWorker' in navigator && 'PushManager' in window) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        const sub = reg ? await reg.pushManager.getSubscription() : null;
+        if (sub) {
+          await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+          await sub.unsubscribe();
+        }
+      }
+    } catch (e) { console.error('No se pudo retirar el aviso de este dispositivo', e); }
     await sb.auth.signOut();
   });
 
@@ -1631,6 +1645,10 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     const { error } = await sb.from('contactados').upsert(keys.map(key => ({ match_key: key, fecha })));
     if (error) { console.error(error); showToast('No se pudo guardar'); return; }
     keys.forEach(key => { state.contactados[key] = fecha; });
+    // Igual que markContacted(): al contactar por una coincidencia también
+    // se pone al día el "último contacto" del comprador, para que no
+    // aparezca en "Sin contacto" ni salte el aviso de inactividad.
+    [...new Set(keys.map(k => k.split('::')[0]))].forEach(id => marcarUltimoContacto(id, { silencioso: true }));
     renderAll();
   }
 
@@ -1640,6 +1658,13 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     const { error } = await sb.from('alquiler_contactados').upsert(keys.map(key => ({ match_key: key, fecha })));
     if (error) { console.error(error); showToast('No se pudo guardar'); return; }
     keys.forEach(key => { state.alquilerContactados[key] = fecha; });
+    // Lo mismo para quien busca alquiler: pone al día su "último contacto".
+    [...new Set(keys.map(k => k.split('::')[0]))].forEach(async id => {
+      const { error: e2 } = await sb.from('alquiler_clientes').update({ ultimo_contacto: fecha }).eq('id', id);
+      if (e2) { console.error(e2); return; }
+      const cli = (state.alquilerClientes || []).find(x => x.id === id);
+      if (cli) cli.ultimo_contacto = fecha;
+    });
     renderAll();
   }
 
