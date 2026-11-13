@@ -1247,12 +1247,22 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       } catch (e) { console.error('No se pudo retirar el aviso de este dispositivo', e); }
     })();
     await Promise.race([retirarAviso, new Promise(resolve => setTimeout(resolve, 2000))]);
+    // Si la sesion de este movil esta atascada (pasa en iPhone cuando la app
+    // lleva mucho en segundo plano), signOut() puede no responder nunca. Se le
+    // da 3 segundos; despues se borra la sesion guardada a mano y se recarga,
+    // asi que siempre se puede salir.
     try {
-      await sb.auth.signOut();
-    } catch (e) {
-      console.error('Error al cerrar sesion', e);
-      try { await sb.auth.signOut({ scope: 'local' }); } catch (e2) {}
-    }
+      await Promise.race([
+        sb.auth.signOut().catch(e => console.error('Error al cerrar sesion', e)),
+        new Promise(resolve => setTimeout(resolve, 3000)),
+      ]);
+    } catch (e) { console.error(e); }
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-') && k.includes('auth-token'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch (e) {}
+    location.reload();
   });
 
   document.getElementById('btn-notif').addEventListener('click', requestNotifPermission);
