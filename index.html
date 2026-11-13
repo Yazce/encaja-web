@@ -1231,17 +1231,28 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     // que los avisos de esta cuenta no sigan llegando a quien use el equipo
     // después (y para que esa persona pueda registrar los suyos). Si algo
     // falla, no impide cerrar sesión.
-    try {
-      if ('serviceWorker' in navigator && 'PushManager' in window) {
-        const reg = await navigator.serviceWorker.getRegistration();
-        const sub = reg ? await reg.pushManager.getSubscription() : null;
-        if (sub) {
-          await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
-          await sub.unsubscribe();
+    // Esta limpieza NUNCA puede bloquear el cierre de sesion: en algunos
+    // moviles (iPhone) las llamadas de push se quedan esperando sin responder,
+    // asi que se le da como maximo 2 segundos y se sigue pase lo que pase.
+    const retirarAviso = (async () => {
+      try {
+        if ('serviceWorker' in navigator && 'PushManager' in window) {
+          const reg = await navigator.serviceWorker.getRegistration();
+          const sub = reg ? await reg.pushManager.getSubscription() : null;
+          if (sub) {
+            await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+            await sub.unsubscribe();
+          }
         }
-      }
-    } catch (e) { console.error('No se pudo retirar el aviso de este dispositivo', e); }
-    await sb.auth.signOut();
+      } catch (e) { console.error('No se pudo retirar el aviso de este dispositivo', e); }
+    })();
+    await Promise.race([retirarAviso, new Promise(resolve => setTimeout(resolve, 2000))]);
+    try {
+      await sb.auth.signOut();
+    } catch (e) {
+      console.error('Error al cerrar sesion', e);
+      try { await sb.auth.signOut({ scope: 'local' }); } catch (e2) {}
+    }
   });
 
   document.getElementById('btn-notif').addEventListener('click', requestNotifPermission);
