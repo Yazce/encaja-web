@@ -966,7 +966,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     // verdad, no solo mirando el texto en la app. El resto de mensajes de
     // la app (Coincidencias) tampoco usan emoji, así que queda igual de
     // consistente sin él.
-    const saludo = `Hola ${nombreCorto(c.nombre)}, ${presentacion()}. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
+    const saludo = `Hola ${nombreCorto(c.nombre)}, ${presentacion(c)}. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
     if (c.rol === 'vendedor') {
       return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? ${argumentoDemanda(c)}Cuéntame cómo lo llevas.`;
     }
@@ -1704,7 +1704,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   }
 
   function buildMessage(comprador, piso) {
-    let msg = `Hola ${nombreCorto(comprador.nombre)}, ${presentacion()}. ${esBajada(piso) ? 'Ha bajado de precio un piso' : 'Ha entrado un piso'} en ${piso.zona}`;
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, ${presentacion(comprador)}. ${esBajada(piso) ? 'Ha bajado de precio un piso' : 'Ha entrado un piso'} en ${piso.zona}`;
     if (piso.tipo) msg += ` (${piso.tipo.toLowerCase()})`;
     msg += ` que puede encajar con lo que buscas`;
     if (piso.precio) msg += `: ${fmtMoney(piso.precio)}${bajadaTexto(piso)}`;
@@ -1725,7 +1725,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     } else if (nBajadas) {
       intro += nBajadas === 1 ? ' (una acaba de bajar de precio)' : ' (algunas acaban de bajar de precio)';
     }
-    let msg = `Hola ${nombreCorto(comprador.nombre)}, ${presentacion()}. ${intro}:\n\n`;
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, ${presentacion(comprador)}. ${intro}:\n\n`;
     list.forEach((m, i) => {
       const p = m.piso;
       msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}${bajadaTexto(p)}\n`;
@@ -2505,16 +2505,26 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
 
   // ---- Firma: "soy Daniel, de Inmoparadise" ----
   function capitaliza(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
-  function nombreComercial() {
-    let n = (currentProfile && currentProfile.nombre) || (currentUser && emailToUsername(currentUser.email)) || '';
-    n = n.trim().split(/\s+/)[0] || '';
-    // Si lo único que hay es un email o un usuario genérico ("usuario3"),
-    // mejor no firmar con eso: se deja el saludo general de la agencia.
-    if (!n || n.includes('@') || /^usuario\d*$/i.test(n)) return '';
+  // Firma con el nombre del comercial QUE LLEVA ese contacto (no con el de
+  // quien tiene la sesión abierta): si una administradora manda el mensaje
+  // de un cliente de Daniel, el mensaje dice "soy Daniel". Solo si el
+  // contacto no tiene comercial reconocible se usa el nombre de quien envía.
+  function nombreValido(n) {
+    n = (n || '').trim().split(/s+/)[0] || '';
+    // Un email o un usuario genérico ("usuario3") no sirve como firma.
+    if (!n || n.includes('@') || /^usuariod*$/i.test(n)) return '';
     return capitaliza(n);
   }
-  function presentacion() {
-    const n = nombreComercial();
+  function nombreComercial(c) {
+    if (c) {
+      const perfil = c.owner_id ? state.perfiles.find(p => p.id === c.owner_id) : null;
+      const delContacto = nombreValido(perfil && perfil.nombre) || nombreValido(c.agente);
+      if (delContacto) return delContacto;
+    }
+    return nombreValido(currentProfile && currentProfile.nombre) || nombreValido(currentUser && emailToUsername(currentUser.email));
+  }
+  function presentacion(c) {
+    const n = nombreComercial(c);
     return n ? `soy ${n}, de Inmoparadise` : 'soy de Inmoparadise';
   }
 
@@ -2740,7 +2750,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       .sort((a, b) => a.t - b.t);
   }
   function mensajeVisita(c) {
-    return `Hola ${nombreCorto(c.nombre)}, ${presentacion()}. Te recuerdo nuestra visita el ${fmtVisita(c.visita_fecha, true)}. ¿Te sigue viniendo bien?`;
+    return `Hola ${nombreCorto(c.nombre)}, ${presentacion(c)}. Te recuerdo nuestra visita el ${fmtVisita(c.visita_fecha, true)}. ¿Te sigue viniendo bien?`;
   }
 
   // ---- Recordatorios de alquiler (mismo criterio de 5 días que los clientes de compra) ----
@@ -2765,7 +2775,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   function mensajeInactividadAlquiler(c) {
     const dias = diasDesde(c.ultimo_contacto || c.fecha);
     const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : dias < 7 ? 'hace unos días' : 'hace un tiempo';
-    const saludo = `Hola ${nombreCorto(c.nombre)}, ${presentacion()}. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
+    const saludo = `Hola ${nombreCorto(c.nombre)}, ${presentacion(c)}. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
     const candidatos = (state.alquilerPisos || []).filter(p => {
       if (!zonaMatches(p.zona, c.zona)) return false;
       if (c.tipo && p.tipo && c.tipo !== p.tipo) return false;
