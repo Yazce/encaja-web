@@ -299,6 +299,38 @@
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  .modal-back {
+    position: fixed; inset: 0; background: rgba(20, 30, 32, 0.55); z-index: 20;
+    display: flex; align-items: flex-end; justify-content: center; padding: 12px;
+  }
+  @media (min-width: 640px) { .modal-back { align-items: center; } }
+  .modal-card {
+    background: var(--surface); border-radius: 14px; padding: 20px 18px; width: 100%; max-width: 460px;
+    max-height: 92vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+  }
+  .modal-card h3 { margin: 0 0 12px; font-size: 17px; }
+  .modal-card label { display: block; margin: 14px 0 6px; }
+  .modal-card textarea { width: 100%; min-height: 64px; box-sizing: border-box; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    appearance: none; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 8px 12px; border-radius: 18px;
+  }
+  .chip.on { background: var(--sea); border-color: var(--sea); color: #fff; }
+  .hist-box { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: #FBF8F1; }
+  .hist-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin-bottom: 6px; }
+  .hist-row { font-size: 12.5px; padding: 5px 0; border-top: 1px solid var(--line); }
+  .hist-row:first-of-type { border-top: none; }
+  .hist-fecha { color: var(--ink-soft); }
+  .hist-nota { margin-top: 2px; white-space: pre-wrap; }
+  .sub-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); margin: 18px 0 8px; }
+  .sub-title:first-child { margin-top: 0; }
+  .equipo-table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+  .equipo-table th, .equipo-table td { padding: 9px 10px; border-bottom: 1px solid var(--line); text-align: right; }
+  .equipo-table th { font-size: 11px; font-weight: 700; color: var(--ink-soft); vertical-align: bottom; }
+  .equipo-table th:first-child, .equipo-table td:first-child { text-align: left; font-weight: 600; white-space: nowrap; }
+  .equipo-table td.aviso { color: #B4532A; font-weight: 700; }
+
   .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .auth-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 32px 28px; max-width: 340px; width: 100%; text-align: center; }
   .auth-card .mark { margin: 0 auto 10px; display: block; }
@@ -392,6 +424,7 @@
     <button data-tab="matches">Coincidencias <span class="count" id="count-matches">0</span></button>
     <button data-tab="sincontacto">Sin contacto <span class="count" id="count-sincontacto">0</span></button>
     <button data-tab="alquiler">Alquiler <span class="count" id="count-alquiler">0</span></button>
+    <button data-tab="equipo" style="display:none;">Equipo</button>
   </nav>
 
   <!-- COMPRADORES -->
@@ -457,6 +490,13 @@
               <option value="vendedor" selected>Vendedor</option>
               <option value="comprador">Comprador</option>
               <option value="ambos">Compra y vende</option>
+            </select>
+          </div>
+          <div>
+            <label>¿Ya es cliente nuestro?</label>
+            <select id="v-cliente">
+              <option value="no" selected>No, todavía no (aviso cada 14 días)</option>
+              <option value="si">Sí, ya es cliente (aviso cada 5 días)</option>
             </select>
           </div>
           <div class="full">
@@ -527,8 +567,15 @@
   <!-- SIN CONTACTO: clientes con 5+ días sin hablar; vendedores que aún no son clientes, 14+ -->
   <section class="panel" id="panel-sincontacto">
     <h2 class="section-title">Para contactar hoy</h2>
-    <div class="hint" style="margin-bottom:12px;">Compradores y vendedores activos cuya "próxima fecha de contacto" ya ha llegado (o, si no se puso ninguna, llevan 5 días o más sin hablar — 14 días si es un vendedor que todavía no es cliente nuestro). Si busca piso, el WhatsApp ya lleva las viviendas que le encajan; si vende, solo pregunta si sigue en pie. Marca "Cerrado" o "Descartado" en un contacto para que deje de aparecer aquí y de avisar.</div>
+    <div class="hint" style="margin-bottom:12px;">Arriba, las visitas agendadas (y las ya hechas que faltan por apuntar). Debajo, compradores, vendedores y clientes de alquiler activos cuya "próxima fecha de contacto" ya ha llegado (o, si no se puso ninguna, llevan 5 días o más sin hablar — 14 días si es un vendedor que todavía no es cliente nuestro). Si busca piso, el WhatsApp ya lleva las viviendas que le encajan; si vende, solo pregunta si sigue en pie. Marca "Cerrado" o "Descartado" en un contacto para que deje de aparecer aquí y de avisar.</div>
     <div id="list-sincontacto"><div class="loading">Cargando…</div></div>
+  </section>
+
+  <!-- EQUIPO: actividad por comercial (solo administradoras) -->
+  <section class="panel" id="panel-equipo">
+    <h2 class="section-title">Actividad del equipo</h2>
+    <div class="hint" style="margin-bottom:12px;">Qué tiene pendiente y qué ha hecho cada comercial. "Para contactar hoy" y "coincidencias sin enviar" son lo que les queda por hacer; el resto es lo que han movido en los últimos 7 días.</div>
+    <div id="list-equipo"><div class="loading">Cargando…</div></div>
   </section>
 
   <!-- ALQUILER (independiente de Compradores/Pisos/Coincidencias de compraventa) -->
@@ -614,6 +661,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="modal-back" id="registro-modal" style="display:none;"></div>
 
 <script>
 (function () {
@@ -644,6 +692,8 @@
     compradores: [], pisos: [], contactados: {},
     alquilerClientes: [], alquilerPisos: [], alquilerContactados: {},
     perfiles: [],
+    demanda: null,        // compradores activos de todo el equipo (solo zona/tipo/presupuesto)
+    historialSemana: [],  // apuntes de historial de los últimos 7 días (solo admin)
   };
   let currentUser = null;
   let currentProfile = null;
@@ -916,9 +966,9 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     // verdad, no solo mirando el texto en la app. El resto de mensajes de
     // la app (Coincidencias) tampoco usan emoji, así que queda igual de
     // consistente sin él.
-    const saludo = `Hola ${nombreCorto(c.nombre)}, soy de Inmoparadise. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
+    const saludo = `Hola ${nombreCorto(c.nombre)}, ${presentacion()}. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
     if (c.rol === 'vendedor') {
-      return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? Cuéntame cómo lo llevas.`;
+      return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? ${argumentoDemanda(c)}Cuéntame cómo lo llevas.`;
     }
     const candidatos = pisosVigentes().filter(p => {
       if (p.reservado) return false;
@@ -1072,6 +1122,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       const note = document.getElementById('alquiler-setup-note');
       if (note) note.style.display = 'block';
     }
+    cargarExtras();
     renderAll();
     abrirCompradorDesdeEnlace();
   }
@@ -1088,7 +1139,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     // "/?tab=sincontacto": lo manda el aviso resumen de "tienes N contactos
     // por contactar", para caer directamente en esa lista.
     const tab = new URLSearchParams(window.location.search).get('tab');
-    if (tab && !tabDesdeEnlaceAbierta && ['sincontacto', 'matches', 'compradores', 'vendedores', 'pisos'].includes(tab)) {
+    if (tab && !tabDesdeEnlaceAbierta && ['sincontacto', 'matches', 'compradores', 'vendedores', 'pisos', 'alquiler', 'equipo'].includes(tab)) {
       tabDesdeEnlaceAbierta = true;
       document.querySelector(`nav.tabs button[data-tab="${tab}"]`)?.click();
     }
@@ -1381,6 +1432,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       fecha: new Date().toISOString(),
     };
     if (!avisaSiTelefonoDuplicado(item.telefono)) return;
+    if (item.rol === 'vendedor' && document.getElementById('v-cliente') && document.getElementById('v-cliente').value === 'si') item.cliente_nuestro = true;
     const ownerOverride = ownerFromSelector('v-owner');
     if (ownerOverride) { item.owner_id = ownerOverride.owner_id; item.agente = ownerOverride.agente; }
     const { error } = await sb.from('compradores').insert(item);
@@ -1652,7 +1704,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   }
 
   function buildMessage(comprador, piso) {
-    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. ${esBajada(piso) ? 'Ha bajado de precio un piso' : 'Ha entrado un piso'} en ${piso.zona}`;
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, ${presentacion()}. ${esBajada(piso) ? 'Ha bajado de precio un piso' : 'Ha entrado un piso'} en ${piso.zona}`;
     if (piso.tipo) msg += ` (${piso.tipo.toLowerCase()})`;
     msg += ` que puede encajar con lo que buscas`;
     if (piso.precio) msg += `: ${fmtMoney(piso.precio)}${bajadaTexto(piso)}`;
@@ -1673,7 +1725,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     } else if (nBajadas) {
       intro += nBajadas === 1 ? ' (una acaba de bajar de precio)' : ' (algunas acaban de bajar de precio)';
     }
-    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. ${intro}:\n\n`;
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, ${presentacion()}. ${intro}:\n\n`;
     list.forEach((m, i) => {
       const p = m.piso;
       msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}${bajadaTexto(p)}\n`;
@@ -1705,14 +1757,41 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   // al día ultimo_contacto para que el aviso de inactividad no salte.
   async function marcarUltimoContacto(id, opts) {
     const fecha = new Date().toISOString();
-    const { error } = await sb.from('compradores').update({ ultimo_contacto: fecha }).eq('id', id);
-    if (error) { console.error(error); if (!opts || !opts.silencioso) showToast('No se pudo guardar'); return; }
     const c = state.compradores.find(x => x.id === id);
-    if (c) c.ultimo_contacto = fecha;
+    const patch = { ultimo_contacto: fecha };
+    // Si tenía puesta a mano una "próxima fecha de contacto" que ya ha
+    // llegado, se quita: si no, seguiría saliendo como pendiente para
+    // siempre aunque se le acabe de contactar.
+    if (c && c.proxima_contacto && c.proxima_contacto <= fecha.slice(0, 10)) patch.proxima_contacto = null;
+    const { error } = await sb.from('compradores').update(patch).eq('id', id);
+    if (error) { console.error(error); if (!opts || !opts.silencioso) showToast('No se pudo guardar'); return; }
+    if (c) Object.assign(c, patch);
+    if (opts && opts.log) logHistorial(id, 'venta', opts.log.tipo, opts.log.nota);
     if (!opts || !opts.silencioso) { renderAll(); showToast('Marcado como contactado hoy'); }
   }
 
-  async function markContactedBatch(keys) {
+  // Texto para el historial: qué pisos se han enviado / dado por contactados.
+  function notaDePisos(pisoIds, lista, tipo) {
+    const desc = pisoIds.map(pid => {
+      const p = lista.find(x => x.id === pid);
+      return p ? `${p.zona} ${fmtMoney(p.precio)}` : null;
+    }).filter(Boolean).join('; ');
+    const n = pisoIds.length;
+    return tipo === 'whatsapp'
+      ? `Enviada${n === 1 ? '' : 's'} ${n} vivienda${n === 1 ? '' : 's'}${desc ? ': ' + desc : ''}`
+      : `Coincidencias marcadas como contactadas${desc ? ': ' + desc : ''}`;
+  }
+  function agrupaKeys(keys) {
+    const porContacto = new Map();
+    keys.forEach(k => {
+      const [cid, pid] = k.split('::');
+      if (!porContacto.has(cid)) porContacto.set(cid, []);
+      porContacto.get(cid).push(pid);
+    });
+    return porContacto;
+  }
+
+  async function markContactedBatch(keys, tipo) {
     if (!keys.length) return;
     const fecha = new Date().toISOString();
     const { error } = await sb.from('contactados').upsert(keys.map(key => ({ match_key: key, fecha })));
@@ -1721,22 +1800,27 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     // Igual que markContacted(): al contactar por una coincidencia también
     // se pone al día el "último contacto" del comprador, para que no
     // aparezca en "Sin contacto" ni salte el aviso de inactividad.
-    [...new Set(keys.map(k => k.split('::')[0]))].forEach(id => marcarUltimoContacto(id, { silencioso: true }));
+    agrupaKeys(keys).forEach((pisoIds, id) => {
+      marcarUltimoContacto(id, { silencioso: true, log: { tipo: tipo || 'nota', nota: notaDePisos(pisoIds, state.pisos, tipo) } });
+    });
     renderAll();
   }
 
-  async function markContactedBatchAlquiler(keys) {
+  async function markContactedBatchAlquiler(keys, tipo) {
     if (!keys.length) return;
     const fecha = new Date().toISOString();
     const { error } = await sb.from('alquiler_contactados').upsert(keys.map(key => ({ match_key: key, fecha })));
     if (error) { console.error(error); showToast('No se pudo guardar'); return; }
     keys.forEach(key => { state.alquilerContactados[key] = fecha; });
     // Lo mismo para quien busca alquiler: pone al día su "último contacto".
-    [...new Set(keys.map(k => k.split('::')[0]))].forEach(async id => {
-      const { error: e2 } = await sb.from('alquiler_clientes').update({ ultimo_contacto: fecha }).eq('id', id);
-      if (e2) { console.error(e2); return; }
+    agrupaKeys(keys).forEach(async (pisoIds, id) => {
       const cli = (state.alquilerClientes || []).find(x => x.id === id);
-      if (cli) cli.ultimo_contacto = fecha;
+      const patch = { ultimo_contacto: fecha };
+      if (cli && cli.proxima_contacto && cli.proxima_contacto <= fecha.slice(0, 10)) patch.proxima_contacto = null;
+      const { error: e2 } = await sb.from('alquiler_clientes').update(patch).eq('id', id);
+      if (e2) { console.error(e2); return; }
+      if (cli) Object.assign(cli, patch);
+      logHistorial(id, 'alquiler', tipo || 'nota', notaDePisos(pisoIds, state.alquilerPisos || [], tipo));
     });
     renderAll();
   }
@@ -1787,6 +1871,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     renderPisos();
     renderMatches(matches);
     renderSinContacto();
+    renderEquipo(matches);
 
     document.getElementById('count-alq-clientes').textContent = state.alquilerClientes.length;
     document.getElementById('count-alq-pisos').textContent = state.alquilerPisos.length;
@@ -1919,6 +2004,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
           ${c.rol === 'vendedor' && hayColumnaClienteNuestro() ? `<div><label>¿Es cliente nuestro?</label><select id="edit-cliente-${c.id}"><option value="no"${c.cliente_nuestro ? '' : ' selected'}>No, todavía no (aviso cada 14 días)</option><option value="si"${c.cliente_nuestro ? ' selected' : ''}>Sí, ya es cliente (aviso cada 5 días)</option></select></div>` : ''}
           <div><label>Estado</label><select id="edit-estado-${c.id}">${estadoOptionsHtml(c.estado)}</select></div>
           <div><label>Próxima fecha de contacto</label><input type="date" id="edit-proxima-${c.id}" value="${c.proxima_contacto || ''}"></div>
+          ${'visita_fecha' in c ? `<div><label>Visita agendada (día y hora)</label><input type="datetime-local" id="edit-visita-${c.id}" value="${toLocalInput(c.visita_fecha)}"></div>` : ''}
           ${agenteSelectorHtml(`edit-owner-${c.id}`, c.owner_id)}
           <div class="full">
             <label>Zona(s) que busca</label>
@@ -1944,17 +2030,19 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     return `
       <li class="item${paraContactarHoy ? ' para-contactar-hoy' : ''}" id="comprador-${c.id}">
         <div class="item-main">
-          <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${clienteTagHtml(c)}${estadoTagHtml(c.estado)}${paraContactarHoy ? '<span class="contactar-tag">Para contactar hoy</span>' : ''}</div>
+          <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${clienteTagHtml(c)}${estadoTagHtml(c.estado)}${paraContactarHoy ? '<span class="contactar-tag">Para contactar hoy</span>' : ''}${visitaTagHtml(c)}</div>
           <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}${ascensorPlantaTexto(c)}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           ${c.notas ? `<div class="item-notes"><strong>Notas:</strong> ${esc(c.notas)}</div>` : ''}
           <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}${ultimoContactoTexto(c)}${proximaContactoTexto(c)}</div>
+          ${historialHtml(c.id)}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
           <select data-quickestado="${c.id}" style="font-size:11px;padding:3px 6px;">${estadoOptionsHtml(c.estado)}</select>
           <button class="ghost" data-editcomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
           <button class="ghost" data-wacomprador="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">WhatsApp</button>
           <button class="ghost" data-contactadohoy="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Contactado hoy</button>
+          <button class="ghost" data-historial="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">${historialAbierto.has(c.id) ? 'Ocultar historial' : 'Historial'}</button>
           <button class="del" data-list="compradores" data-table="compradores" data-id="${c.id}">Eliminar</button>
         </div>
       </li>`;
@@ -2003,8 +2091,9 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       sel.addEventListener('change', () => updateCompradorEstado(sel.dataset.quickestado, sel.value));
     });
     el.querySelectorAll('[data-contactadohoy]').forEach(btn => {
-      btn.addEventListener('click', () => marcarUltimoContacto(btn.dataset.contactadohoy));
+      btn.addEventListener('click', () => abrirRegistroContacto(btn.dataset.contactadohoy));
     });
+    bindHistorial(el);
     el.querySelectorAll('[data-mostrartodos]').forEach(btn => {
       btn.addEventListener('click', () => {
         mostrarTodosPorTab[btn.dataset.mostrartodos] = true;
@@ -2017,6 +2106,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
         const c = listaCompleta.find(x => x.id === btn.dataset.wacomprador);
         if (!c) return;
         window.open(waLink(c.telefono, mensajeInactividad(c)), '_blank');
+        abrirRegistroContacto(c.id, { tipo: 'whatsapp' });
       });
     });
   }
@@ -2070,6 +2160,8 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       notas: document.getElementById(`edit-notas-${id}`).value.trim(),
       proxima_contacto: document.getElementById(`edit-proxima-${id}`) ? (document.getElementById(`edit-proxima-${id}`).value || null) : null,
     };
+    const visitaEl = document.getElementById(`edit-visita-${id}`);
+    if (visitaEl) patch.visita_fecha = visitaEl.value ? new Date(visitaEl.value).toISOString() : null;
     const clienteSel = document.getElementById(`edit-cliente-${id}`);
     if (clienteSel) patch.cliente_nuestro = clienteSel.value === 'si';
     const ownerSel = document.getElementById(`edit-owner-${id}`);
@@ -2151,11 +2243,15 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
           <div class="item-name">${esc(c.nombre)}${estadoTagHtml(c.estado)}</div>
           <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>/mes${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
-          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}</div>
+          <div class="item-by">Añadido por ${esc(c.agente)} · ${fmtDate(c.fecha)}${ultimoContactoTexto(c)}${proximaContactoTexto(c)}</div>
+          ${historialHtml(c.id)}
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex:none;">
           <select data-quickestadoalq="${c.id}" style="font-size:11px;padding:3px 6px;">${estadoOptionsHtml(c.estado)}</select>
           <button class="ghost" data-editalqcliente="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Editar</button>
+          <button class="ghost" data-waalq="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">WhatsApp</button>
+          <button class="ghost" data-contactadoalq="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">Contactado hoy</button>
+          <button class="ghost" data-historial="${c.id}" style="font-size:11px;padding:4px 9px;white-space:nowrap;">${historialAbierto.has(c.id) ? 'Ocultar historial' : 'Historial'}</button>
           <button class="del" data-list="alquilerClientes" data-table="alquiler_clientes" data-id="${c.id}">Eliminar</button>
         </div>
       </li>`;
@@ -2219,6 +2315,18 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     el.querySelectorAll('[data-quickestadoalq]').forEach(sel => {
       sel.addEventListener('change', () => updateAlqClienteEstado(sel.dataset.quickestadoalq, sel.value));
     });
+    el.querySelectorAll('[data-contactadoalq]').forEach(btn => {
+      btn.addEventListener('click', () => abrirRegistroContacto(btn.dataset.contactadoalq, { origen: 'alquiler' }));
+    });
+    el.querySelectorAll('[data-waalq]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c = state.alquilerClientes.find(x => x.id === btn.dataset.waalq);
+        if (!c) return;
+        window.open(waLink(c.telefono, mensajeInactividadAlquiler(c)), '_blank');
+        abrirRegistroContacto(c.id, { origen: 'alquiler', tipo: 'whatsapp' });
+      });
+    });
+    bindHistorial(el);
   }
 
   async function saveAlqCliente(id) {
@@ -2319,7 +2427,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
         const msg = buildGroupMessage(g.comprador, g.top);
         navigator.clipboard.writeText(msg).then(() => showToast('Mensaje copiado')).catch(() => {});
         window.open(waLink(g.comprador.telefono, msg), '_blank');
-        markContactedBatchAlquiler(g.top.map(m => m.key));
+        markContactedBatchAlquiler(g.top.map(m => m.key), 'whatsapp');
       });
     });
     el.querySelectorAll('[data-donegroupalq]').forEach(btn => {
@@ -2376,7 +2484,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
         const msg = buildGroupMessage(g.comprador, g.top);
         navigator.clipboard.writeText(msg).then(() => showToast('Mensaje copiado')).catch(() => {});
         window.open(waLink(g.comprador.telefono, msg), '_blank');
-        markContactedBatch(g.top.map(m => m.key));
+        markContactedBatch(g.top.map(m => m.key), 'whatsapp');
       });
     });
     el.querySelectorAll('[data-donegroup]').forEach(btn => {
@@ -2389,44 +2497,432 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     });
   }
 
-  // Contactos activos a los que ya toca escribir: 5+ días sin contacto si
-  // son clientes, 14+ si son vendedores que aún no son clientes (mismos
-  // umbrales que el aviso push de inactividad). El botón WhatsApp usa
-  // mensajeInactividad(c), que ya decide solo si ofrece pisos (comprador)
-  // o solo pregunta si sigue vendiendo (vendedor).
+  // ============================================================
+  // Mejoras de noviembre 2026: firma del comercial en los WhatsApp,
+  // registro de contactos (historial + "recordármelo en…"), visitas con
+  // fecha, recordatorios de alquiler y panel de actividad del equipo.
+  // ============================================================
+
+  // ---- Firma: "soy Daniel, de Inmoparadise" ----
+  function capitaliza(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+  function nombreComercial() {
+    let n = (currentProfile && currentProfile.nombre) || (currentUser && emailToUsername(currentUser.email)) || '';
+    n = n.trim().split(/\s+/)[0] || '';
+    // Si lo único que hay es un email o un usuario genérico ("usuario3"),
+    // mejor no firmar con eso: se deja el saludo general de la agencia.
+    if (!n || n.includes('@') || /^usuario\d*$/i.test(n)) return '';
+    return capitaliza(n);
+  }
+  function presentacion() {
+    const n = nombreComercial();
+    return n ? `soy ${n}, de Inmoparadise` : 'soy de Inmoparadise';
+  }
+
+  // ---- Argumento para vendedores: cuántos compradores buscan en su zona ----
+  // state.demanda viene de la función demanda_activa() de la base de datos
+  // (solo zona/tipo/presupuesto de los compradores activos de TODO el
+  // equipo, sin nombres ni teléfonos). Si no está disponible, se cuenta con
+  // los compradores que ve esta persona.
+  function compradoresBuscandoEn(zona) {
+    if (!zona) return 0;
+    const lista = state.demanda || state.compradores.filter(b => b.rol !== 'vendedor' && (b.estado === 'activo' || b.estado === 'en_visita'));
+    return lista.filter(b => b.zona && norm(b.zona) !== 'alicante' && zonaMatches(zona, b.zona)).length;
+  }
+  function argumentoDemanda(c) {
+    const n = compradoresBuscandoEn(c.zona);
+    if (!n) return '';
+    return n === 1
+      ? 'Ahora mismo tenemos un comprador buscando vivienda en esa zona. '
+      : `Ahora mismo tenemos ${n} compradores buscando vivienda en esa zona. `;
+  }
+
+  async function cargarExtras() {
+    try {
+      const { data, error } = await sb.rpc('demanda_activa');
+      state.demanda = error ? null : (data || []);
+    } catch (e) { state.demanda = null; }
+    if (currentProfile && currentProfile.is_admin) {
+      try {
+        const desde = new Date(Date.now() - 7 * 86400000).toISOString();
+        const { data, error } = await sb.from('contacto_historial').select('owner_id, agente').gte('fecha', desde);
+        state.historialSemana = error ? [] : (data || []);
+      } catch (e) { state.historialSemana = []; }
+      renderEquipo(computeMatches());
+    }
+  }
+
+  // ---- Historial de contactos ----
+  const TIPOS_CONTACTO = [
+    { value: 'llamada', label: 'Llamada' },
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'visita', label: 'Visita' },
+    { value: 'email', label: 'Email' },
+    { value: 'nota', label: 'Nota / otro' },
+  ];
+  const historialCache = {};          // id del contacto -> lista de apuntes ya cargada
+  const historialAbierto = new Set(); // ids con el historial desplegado
+  let historialDisponible = true;     // false si la tabla aún no existe en la base
+
+  async function logHistorial(contactoId, origen, tipo, nota) {
+    if (!historialDisponible) return;
+    const row = { comprador_id: contactoId, origen: origen || 'venta', tipo: tipo || 'nota', nota: nota || null, agente: currentAgentName() };
+    try {
+      const { data, error } = await sb.from('contacto_historial').insert(row).select().maybeSingle();
+      if (error) {
+        console.error('No se pudo guardar el historial', error);
+        if (error.code === '42P01' || error.code === 'PGRST205') historialDisponible = false;
+        return;
+      }
+      if (Array.isArray(historialCache[contactoId])) {
+        historialCache[contactoId].unshift(data || Object.assign({ fecha: new Date().toISOString() }, row));
+      }
+    } catch (e) { console.error(e); }
+  }
+  async function cargarHistorial(id) {
+    const { data, error } = await sb.from('contacto_historial').select('*').eq('comprador_id', id).order('fecha', { ascending: false }).limit(50);
+    if (error) console.error(error);
+    historialCache[id] = error ? [] : (data || []);
+    renderAll();
+  }
+  function toggleHistorial(id) {
+    if (historialAbierto.has(id)) {
+      historialAbierto.delete(id);
+    } else {
+      historialAbierto.add(id);
+      if (!Array.isArray(historialCache[id])) cargarHistorial(id);
+    }
+    renderAll();
+  }
+  function fmtFechaHora(iso) {
+    try { return new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; }
+  }
+  function historialHtml(id) {
+    if (!historialAbierto.has(id)) return '';
+    const lista = historialCache[id];
+    let inner;
+    if (!Array.isArray(lista)) {
+      inner = '<div class="hint">Cargando historial…</div>';
+    } else if (!lista.length) {
+      inner = '<div class="hint">Todavía no hay nada apuntado. Pulsa "Contactado hoy" para registrar la primera conversación.</div>';
+    } else {
+      inner = lista.map(h => {
+        const t = TIPOS_CONTACTO.find(x => x.value === h.tipo);
+        return `<div class="hist-row"><span class="hist-fecha">${fmtFechaHora(h.fecha)}</span> · <strong>${esc(t ? t.label : h.tipo)}</strong>${h.agente ? ' · ' + esc(h.agente) : ''}${h.nota ? `<div class="hist-nota">${esc(h.nota)}</div>` : ''}</div>`;
+      }).join('');
+    }
+    return `<div class="hist-box"><div class="hist-title">Historial de contactos</div>${inner}</div>`;
+  }
+  function bindHistorial(container) {
+    container.querySelectorAll('[data-historial]').forEach(btn => {
+      btn.addEventListener('click', () => toggleHistorial(btn.dataset.historial));
+    });
+  }
+
+  // ---- Registrar un contacto: cómo fue, qué se habló y cuándo volver ----
+  let registroActual = null; // { id, origen: 'venta' | 'alquiler' }
+  function buscarContacto(id, origen) {
+    return origen === 'alquiler'
+      ? (state.alquilerClientes || []).find(x => x.id === id)
+      : state.compradores.find(x => x.id === id);
+  }
+  function fechaEnDias(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+  function cerrarRegistroContacto() {
+    registroActual = null;
+    const modal = document.getElementById('registro-modal');
+    if (modal) { modal.style.display = 'none'; modal.innerHTML = ''; }
+  }
+  function abrirRegistroContacto(id, opts) {
+    opts = opts || {};
+    const origen = opts.origen || 'venta';
+    const c = buscarContacto(id, origen);
+    const modal = document.getElementById('registro-modal');
+    if (!c || !modal) return;
+    registroActual = { id, origen };
+    const auto = origen === 'alquiler' ? UMBRAL_DIAS_CLIENTE : umbralDias(c);
+    const tipoSel = opts.tipo || 'llamada';
+    modal.innerHTML = `
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <h3>Contacto con ${esc(nombreCorto(c.nombre))}</h3>
+        <label>¿Cómo ha sido?</label>
+        <div class="chips" id="reg-tipo">
+          ${TIPOS_CONTACTO.map(t => `<button type="button" class="chip${t.value === tipoSel ? ' on' : ''}" data-v="${t.value}">${t.label}</button>`).join('')}
+        </div>
+        <label for="reg-nota">¿Qué habéis hablado? (opcional)</label>
+        <textarea id="reg-nota" placeholder="Le gusta el de Benalúa, quiere verlo la semana que viene..."></textarea>
+        <label>¿Cuándo le vuelves a contactar?</label>
+        <div class="chips" id="reg-prox">
+          <button type="button" class="chip on" data-v="auto">Automático (${auto} días)</button>
+          <button type="button" class="chip" data-v="3">3 días</button>
+          <button type="button" class="chip" data-v="7">1 semana</button>
+          <button type="button" class="chip" data-v="14">2 semanas</button>
+          <button type="button" class="chip" data-v="30">1 mes</button>
+          <button type="button" class="chip" data-v="fecha">Otra fecha</button>
+        </div>
+        <input type="date" id="reg-fecha" min="${fechaEnDias(0)}" style="display:none;margin-top:8px;">
+        <div class="form-footer" style="margin-top:16px;">
+          <button type="button" class="ghost" id="reg-cancelar">Cancelar</button>
+          <button type="button" class="primary" id="reg-guardar">Guardar</button>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+    ['reg-tipo', 'reg-prox'].forEach(grupo => {
+      modal.querySelectorAll(`#${grupo} .chip`).forEach(chip => {
+        chip.addEventListener('click', () => {
+          modal.querySelectorAll(`#${grupo} .chip`).forEach(x => x.classList.remove('on'));
+          chip.classList.add('on');
+          if (grupo === 'reg-prox') document.getElementById('reg-fecha').style.display = chip.dataset.v === 'fecha' ? 'block' : 'none';
+        });
+      });
+    });
+    document.getElementById('reg-cancelar').addEventListener('click', cerrarRegistroContacto);
+    document.getElementById('reg-guardar').addEventListener('click', guardarRegistroContacto);
+  }
+  async function guardarRegistroContacto() {
+    if (!registroActual) return;
+    const { id, origen } = registroActual;
+    const c = buscarContacto(id, origen);
+    const modal = document.getElementById('registro-modal');
+    if (!c) { cerrarRegistroContacto(); return; }
+    const tipo = modal.querySelector('#reg-tipo .chip.on')?.dataset.v || 'nota';
+    const nota = document.getElementById('reg-nota').value.trim();
+    const prox = modal.querySelector('#reg-prox .chip.on')?.dataset.v || 'auto';
+    let proxima = null;
+    if (prox === 'fecha') {
+      proxima = document.getElementById('reg-fecha').value || null;
+      if (!proxima) { showToast('Elige la fecha del próximo contacto'); return; }
+    } else if (prox !== 'auto') {
+      proxima = fechaEnDias(Number(prox));
+    }
+    const ahora = new Date().toISOString();
+    const patch = {};
+    // Una simple nota no cuenta como haber hablado con la persona.
+    if (tipo !== 'nota') patch.ultimo_contacto = ahora;
+    if (tipo !== 'nota' || prox !== 'auto') patch.proxima_contacto = proxima;
+    // Si se apunta una visita y la que había agendada ya ha pasado, se da por hecha.
+    if (tipo === 'visita' && origen !== 'alquiler' && c.visita_fecha && new Date(c.visita_fecha).getTime() <= Date.now()) patch.visita_fecha = null;
+    const boton = document.getElementById('reg-guardar');
+    if (boton) boton.disabled = true;
+    if (Object.keys(patch).length) {
+      const tabla = origen === 'alquiler' ? 'alquiler_clientes' : 'compradores';
+      const { error } = await sb.from(tabla).update(patch).eq('id', id);
+      if (error) { console.error(error); if (boton) boton.disabled = false; showToast('No se pudo guardar, inténtalo de nuevo'); return; }
+      Object.assign(c, patch);
+    }
+    await logHistorial(id, origen, tipo, nota);
+    cerrarRegistroContacto();
+    renderAll();
+    showToast(proxima ? `Guardado · próximo contacto el ${fmtDate(proxima)}` : 'Contacto guardado');
+  }
+
+  // ---- Visitas con fecha ----
+  function toLocalInput(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  function fmtVisita(iso, largo) {
+    try {
+      return new Date(iso).toLocaleString('es-ES', { weekday: largo ? 'long' : 'short', day: 'numeric', month: largo ? 'long' : 'short', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+  }
+  function visitaTagHtml(c) {
+    if (!c.visita_fecha) return '';
+    const pasada = new Date(c.visita_fecha).getTime() < Date.now();
+    return `<span class="contactar-tag">${pasada ? 'Visita hecha' : 'Visita'}: ${esc(fmtVisita(c.visita_fecha))}</span>`;
+  }
+  function computeVisitas() {
+    return state.compradores
+      .filter(c => c.visita_fecha && c.estado !== 'cerrado' && c.estado !== 'descartado')
+      .map(c => ({ c, t: new Date(c.visita_fecha).getTime() }))
+      .filter(v => !isNaN(v.t))
+      .sort((a, b) => a.t - b.t);
+  }
+  function mensajeVisita(c) {
+    return `Hola ${nombreCorto(c.nombre)}, ${presentacion()}. Te recuerdo nuestra visita el ${fmtVisita(c.visita_fecha, true)}. ¿Te sigue viniendo bien?`;
+  }
+
+  // ---- Recordatorios de alquiler (mismo criterio de 5 días que los clientes de compra) ----
+  function proximoContactoAlquiler(c) {
+    if (c.proxima_contacto) return c.proxima_contacto;
+    const base = c.ultimo_contacto || c.fecha;
+    if (!base) return null;
+    const d = new Date(base);
+    d.setDate(d.getDate() + UMBRAL_DIAS_CLIENTE);
+    return d.toISOString().slice(0, 10);
+  }
+  function estaParaContactarHoyAlquiler(c) {
+    if (c.estado !== 'activo') return false;
+    const f = proximoContactoAlquiler(c);
+    return !!f && f <= new Date().toISOString().slice(0, 10);
+  }
+  function computeStaleAlquiler() {
+    return (state.alquilerClientes || [])
+      .filter(estaParaContactarHoyAlquiler)
+      .map(c => ({ c, dias: diasDesde(c.ultimo_contacto || c.fecha), alquiler: true }));
+  }
+  function mensajeInactividadAlquiler(c) {
+    const dias = diasDesde(c.ultimo_contacto || c.fecha);
+    const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : dias < 7 ? 'hace unos días' : 'hace un tiempo';
+    const saludo = `Hola ${nombreCorto(c.nombre)}, ${presentacion()}. ${cuando ? `Hablamos ${cuando}, ` : ''}`;
+    const candidatos = (state.alquilerPisos || []).filter(p => {
+      if (!zonaMatches(p.zona, c.zona)) return false;
+      if (c.tipo && p.tipo && c.tipo !== p.tipo) return false;
+      if (c.presupuesto && p.precio && p.precio > c.presupuesto) return false;
+      return true;
+    });
+    if (!candidatos.length) {
+      return `${saludo}¿sigues buscando piso de alquiler? Cuéntame cómo lo llevas, a ver si te puedo ayudar en algo.`;
+    }
+    let msg = `${saludo}¿sigues buscando piso de alquiler? Mira, tengo estas viviendas que pueden encajarte:\n\n`;
+    candidatos.slice(0, MAX_PISOS_POR_MENSAJE).forEach((p, i) => {
+      msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}/mes\n`;
+      const chars = caractSinUrl(p);
+      if (chars) msg += `${chars.slice(0, 90)}\n`;
+      if (p.url) msg += `${p.url}\n`;
+      msg += '\n';
+    });
+    msg += '¿Te sigue interesando alguna, o ha cambiado lo que buscas?';
+    return msg;
+  }
+
+  // ---- Pestaña "Sin contacto": visitas + contactos a los que ya toca escribir ----
+  // Compra/venta: 5+ días sin contacto si son clientes, 14+ si son vendedores
+  // que aún no son clientes. Alquiler: 5+ días. Mismos umbrales que los
+  // avisos push.
   function renderSinContacto() {
     const el = document.getElementById('list-sincontacto');
-    const stale = computeStale();
-    document.getElementById('count-sincontacto').textContent = stale.length;
-    if (!stale.length) {
+    const stale = computeStale().concat(computeStaleAlquiler()).sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
+    const visitas = computeVisitas();
+    const ahora = Date.now();
+    const finDeHoy = new Date(); finDeHoy.setHours(23, 59, 59, 999);
+    const visitasUrgentes = visitas.filter(v => v.t <= finDeHoy.getTime()).length; // de hoy o ya hechas sin apuntar
+    document.getElementById('count-sincontacto').textContent = stale.length + visitasUrgentes;
+    if (!stale.length && !visitas.length) {
       el.innerHTML = emptyState('Estás al día: no hay nadie pendiente de contactar ahora mismo. 🎉');
       return;
     }
-    el.innerHTML = stale.map(({ c, dias }) => `
-      <div class="match-group" id="sincontacto-${c.id}">
+
+    const visitasHtml = visitas.map(({ c, t }) => {
+      const pasada = t < ahora;
+      const esHoy = !pasada && t <= finDeHoy.getTime();
+      return `
+      <div class="match-group" id="visita-${c.id}">
         <div class="match-group-header">
           <div>
-            <div class="match-group-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${clienteTagHtml(c)}</div>
-            <div class="match-group-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'cualquier zona'}${c.rol !== 'vendedor' ? ` · <span class="num">${fmtMoney(c.presupuesto)}</span>` : ''}</div>
-            <div class="item-by">Comercial: ${esc(c.agente) || 'sin asignar'} · ${dias === null ? 'sin contacto' : dias === 0 ? 'contactado hoy' : dias === 1 ? '1 día sin contacto' : dias + ' días sin contacto'} · se avisa cada ${umbralDias(c)} días</div>
+            <div class="match-group-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${esHoy ? '<span class="contactar-tag">Hoy</span>' : ''}</div>
+            <div class="match-group-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'}</div>
+            <div class="item-by">Comercial: ${esc(c.agente) || 'sin asignar'} · ${pasada ? 'Visita hecha el ' : 'Visita el '}${esc(fmtVisita(c.visita_fecha))}${pasada ? ' — falta apuntar cómo fue' : ''}</div>
           </div>
         </div>
         <div class="match-group-actions">
-          <button class="primary" data-wasincontacto="${c.id}">📲 Enviar WhatsApp</button>
-          <button class="ghost done" data-donesincontacto="${c.id}">Marcar como contactado</button>
+          ${pasada
+            ? `<button class="primary" data-visitahecha="${c.id}">Apuntar cómo fue</button>`
+            : `<button class="primary" data-wavisita="${c.id}">📲 Recordar por WhatsApp</button>`}
+        </div>
+      </div>`;
+    }).join('');
+
+    const staleHtml = stale.map(({ c, dias, alquiler }) => `
+      <div class="match-group" id="sincontacto-${c.id}">
+        <div class="match-group-header">
+          <div>
+            <div class="match-group-name">${esc(c.nombre)}${alquiler ? '<span class="role-tag role-ambos">Alquiler</span>' : rolTagHtml(c.rol) + clienteTagHtml(c)}</div>
+            <div class="match-group-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'cualquier zona'}${alquiler ? ` · <span class="num">${fmtMoney(c.presupuesto)}</span>/mes` : (c.rol !== 'vendedor' ? ` · <span class="num">${fmtMoney(c.presupuesto)}</span>` : '')}</div>
+            <div class="item-by">Comercial: ${esc(c.agente) || 'sin asignar'} · ${dias === null ? 'sin contacto' : dias === 0 ? 'contactado hoy' : dias === 1 ? '1 día sin contacto' : dias + ' días sin contacto'} · se avisa cada ${alquiler ? UMBRAL_DIAS_CLIENTE : umbralDias(c)} días</div>
+          </div>
+        </div>
+        <div class="match-group-actions">
+          <button class="primary" data-wasincontacto="${c.id}" data-origen="${alquiler ? 'alquiler' : 'venta'}">📲 Enviar WhatsApp</button>
+          <button class="ghost done" data-donesincontacto="${c.id}" data-origen="${alquiler ? 'alquiler' : 'venta'}">Marcar como contactado</button>
         </div>
       </div>`).join('');
 
+    el.innerHTML =
+      (visitas.length ? `<h3 class="sub-title">Visitas</h3>${visitasHtml}` : '') +
+      (stale.length ? `${visitas.length ? '<h3 class="sub-title">Para contactar</h3>' : ''}${staleHtml}` : '');
+
     el.querySelectorAll('[data-wasincontacto]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const c = state.compradores.find(x => x.id === btn.dataset.wasincontacto);
+        const origen = btn.dataset.origen || 'venta';
+        const c = buscarContacto(btn.dataset.wasincontacto, origen);
         if (!c) return;
-        window.open(waLink(c.telefono, mensajeInactividad(c)), '_blank');
+        window.open(waLink(c.telefono, origen === 'alquiler' ? mensajeInactividadAlquiler(c) : mensajeInactividad(c)), '_blank');
+        abrirRegistroContacto(c.id, { origen, tipo: 'whatsapp' });
       });
     });
     el.querySelectorAll('[data-donesincontacto]').forEach(btn => {
-      btn.addEventListener('click', () => marcarUltimoContacto(btn.dataset.donesincontacto));
+      btn.addEventListener('click', () => abrirRegistroContacto(btn.dataset.donesincontacto, { origen: btn.dataset.origen || 'venta' }));
     });
+    el.querySelectorAll('[data-wavisita]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c = state.compradores.find(x => x.id === btn.dataset.wavisita);
+        if (!c) return;
+        window.open(waLink(c.telefono, mensajeVisita(c)), '_blank');
+        logHistorial(c.id, 'venta', 'whatsapp', `Recordatorio de la visita del ${fmtVisita(c.visita_fecha)}`);
+      });
+    });
+    el.querySelectorAll('[data-visitahecha]').forEach(btn => {
+      btn.addEventListener('click', () => abrirRegistroContacto(btn.dataset.visitahecha, { tipo: 'visita' }));
+    });
+  }
+
+  // ---- Panel "Equipo" (solo administradoras): actividad por comercial ----
+  function renderEquipo(matches) {
+    const btn = document.querySelector('nav.tabs button[data-tab="equipo"]');
+    const esAdmin = !!(currentProfile && currentProfile.is_admin);
+    if (btn) btn.style.display = esAdmin ? '' : 'none';
+    const el = document.getElementById('list-equipo');
+    if (!el || !esAdmin) return;
+
+    const filas = new Map();
+    const fila = (ownerId, agente) => {
+      const k = ownerId || ('sin:' + (agente || ''));
+      if (!filas.has(k)) {
+        const p = state.perfiles.find(x => x.id === ownerId);
+        filas.set(k, { nombre: (p && p.nombre) || agente || 'Sin asignar', activos: 0, pendientes: 0, coincidencias: 0, contactados7: 0, registros7: 0, visitas: 0, sinRevisar: 0 });
+      }
+      return filas.get(k);
+    };
+    state.perfiles.forEach(p => fila(p.id, p.nombre));
+    const ahora = Date.now();
+    const hace7 = ahora - 7 * 86400000;
+    for (const c of state.compradores) {
+      const f = fila(c.owner_id, c.agente);
+      if (c.estado === 'sin_revisar') { f.sinRevisar++; continue; }
+      if (c.estado === 'activo' || c.estado === 'en_visita') f.activos++;
+      if (estaParaContactarHoy(c)) f.pendientes++;
+      if (c.ultimo_contacto && new Date(c.ultimo_contacto).getTime() >= hace7) f.contactados7++;
+      if (c.visita_fecha && new Date(c.visita_fecha).getTime() >= ahora) f.visitas++;
+    }
+    for (const c of (state.alquilerClientes || [])) {
+      const f = fila(c.owner_id, c.agente);
+      if (c.estado === 'sin_revisar') { f.sinRevisar++; continue; }
+      if (c.estado === 'activo' || c.estado === 'en_visita') f.activos++;
+      if (estaParaContactarHoyAlquiler(c)) f.pendientes++;
+      if (c.ultimo_contacto && new Date(c.ultimo_contacto).getTime() >= hace7) f.contactados7++;
+    }
+    const conCoincidencia = new Map();
+    (matches || []).forEach(m => conCoincidencia.set(m.comprador.id, m.comprador));
+    conCoincidencia.forEach(c => { fila(c.owner_id, c.agente).coincidencias++; });
+    (state.historialSemana || []).forEach(h => { fila(h.owner_id, h.agente).registros7++; });
+
+    const lista = Array.from(filas.values()).sort((a, b) => b.pendientes - a.pendientes || a.nombre.localeCompare(b.nombre, 'es'));
+    if (!lista.length) { el.innerHTML = emptyState('Todavía no hay actividad que enseñar.'); return; }
+    const celda = (n, aviso) => `<td class="num${aviso && n ? ' aviso' : ''}">${n}</td>`;
+    el.innerHTML = `
+      <div style="overflow-x:auto;">
+        <table class="equipo-table">
+          <thead><tr>
+            <th>Comercial</th><th>Contactos activos</th><th>Para contactar hoy</th><th>Clientes con coincidencias sin enviar</th>
+            <th>Contactados (7 días)</th><th>Apuntes en historial (7 días)</th><th>Visitas agendadas</th><th>Sin revisar</th>
+          </tr></thead>
+          <tbody>
+            ${lista.map(f => `<tr><td>${esc(f.nombre)}</td>${celda(f.activos)}${celda(f.pendientes, true)}${celda(f.coincidencias, true)}${celda(f.contactados7)}${celda(f.registros7)}${celda(f.visitas)}${celda(f.sinRevisar)}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
   }
 
   function emptyState(text) {

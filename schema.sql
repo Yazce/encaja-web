@@ -428,3 +428,68 @@ alter table public.alquiler_clientes add column if not exists ultimo_aviso_inact
 -- Esta columna es la casilla "¿Es cliente nuestro?" de la ficha de un
 -- vendedor. Por defecto, no lo es.
 alter table public.compradores add column if not exists cliente_nuestro boolean not null default false;
+
+-- ============================================================
+-- Mejoras de noviembre 2026: visitas, historial y demanda
+-- ============================================================
+-- Visita agendada (día y hora) de un comprador/vendedor.
+alter table public.compradores add column if not exists visita_fecha timestamptz;
+-- "Próxima fecha de contacto" también para los clientes de alquiler.
+alter table public.alquiler_clientes add column if not exists proxima_contacto date;
+
+-- Historial de contactos: qué se habló y cuándo con cada contacto
+-- (compra/venta o alquiler). Lo ve quien lleva el contacto y las
+-- administradoras.
+create table if not exists public.contacto_historial (
+  id uuid primary key default gen_random_uuid(),
+  comprador_id text not null,
+  origen text not null default 'venta',
+  owner_id uuid references auth.users(id) default auth.uid(),
+  agente text,
+  tipo text not null default 'nota',
+  nota text,
+  fecha timestamptz not null default now()
+);
+create index if not exists contacto_historial_comprador_idx on public.contacto_historial (comprador_id, fecha desc);
+alter table public.contacto_historial enable row level security;
+
+drop policy if exists contacto_historial_select on public.contacto_historial;
+create policy contacto_historial_select on public.contacto_historial
+  for select using (
+    public.is_admin()
+    or exists (select 1 from public.compradores c where c.id = comprador_id and c.owner_id = auth.uid())
+    or exists (select 1 from public.alquiler_clientes a where a.id = comprador_id and a.owner_id = auth.uid())
+  );
+
+drop policy if exists contacto_historial_insert on public.contacto_historial;
+create policy contacto_historial_insert on public.contacto_historial
+  for insert with check (
+    owner_id = auth.uid() and (
+      public.is_admin()
+      or exists (select 1 from public.compradores c where c.id = comprador_id and c.owner_id = auth.uid())
+      or exists (select 1 from public.alquiler_clientes a where a.id = comprador_id and a.owner_id = auth.uid())
+    )
+  );
+
+drop policy if exists contacto_historial_delete on public.contacto_historial;
+create policy contacto_historial_delete on public.contacto_historial
+  for delete using (owner_id = auth.uid() or public.is_admin());
+
+-- Demanda activa de TODO el equipo, sin datos personales (solo zona,
+-- tipo y presupuesto): sirve para decirle a un propietario cuántos
+-- compradores hay buscando en su zona, aunque no sean del mismo comercial.
+create or replace function public.demanda_activa()
+returns table (zona text, tipo text, presupuesto numeric)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select c.zona, c.tipo, c.presupuesto
+  from public.compradores c
+  where auth.uid() is not null
+    and c.rol in ('comprador', 'ambos')
+    and c.estado in ('activo', 'en_visita')
+$$;
+revoke all on function public.demanda_activa() from public, anon;
+grant execute on function public.demanda_activa() to authenticated;
