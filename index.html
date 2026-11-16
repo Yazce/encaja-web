@@ -524,10 +524,10 @@
     <div id="list-matches"><div class="loading">Cargando…</div></div>
   </section>
 
-  <!-- SIN CONTACTO: compradores/vendedores activos con 14+ días sin hablar -->
+  <!-- SIN CONTACTO: clientes con 5+ días sin hablar; vendedores que aún no son clientes, 14+ -->
   <section class="panel" id="panel-sincontacto">
     <h2 class="section-title">Para contactar hoy</h2>
-    <div class="hint" style="margin-bottom:12px;">Compradores y vendedores activos cuya "próxima fecha de contacto" ya ha llegado (o, si no se puso ninguna, llevan 14 días o más sin hablar). Si busca piso, el WhatsApp ya lleva las viviendas que le encajan; si vende, solo pregunta si sigue en pie. Marca "Cerrado" o "Descartado" en un contacto para que deje de aparecer aquí y de avisar.</div>
+    <div class="hint" style="margin-bottom:12px;">Compradores y vendedores activos cuya "próxima fecha de contacto" ya ha llegado (o, si no se puso ninguna, llevan 5 días o más sin hablar — 14 días si es un vendedor que todavía no es cliente nuestro). Si busca piso, el WhatsApp ya lleva las viviendas que le encajan; si vende, solo pregunta si sigue en pie. Marca "Cerrado" o "Descartado" en un contacto para que deje de aparecer aquí y de avisar.</div>
     <div id="list-sincontacto"><div class="loading">Cargando…</div></div>
   </section>
 
@@ -858,7 +858,7 @@ function esc(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&
   }
   // "Próxima fecha de contacto": si la persona la puso a mano, se respeta
   // tal cual. Si no, se calcula sola a partir del último contacto (o de la
-  // fecha de alta si nunca se marcó ninguno) + UMBRAL_DIAS_INACTIVIDAD, que
+  // fecha de alta si nunca se marcó ninguno) + umbralDias(c), que
   // es el mismo criterio que ya usaba "Sin contacto hace tiempo" — así, a
   // quien no le toques nada, le sigue funcionando exactamente igual que
   // hasta ahora.
@@ -867,7 +867,7 @@ function esc(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&
     const base = c.ultimo_contacto || c.fecha;
     if (!base) return null;
     const d = new Date(base);
-    d.setDate(d.getDate() + UMBRAL_DIAS_INACTIVIDAD);
+    d.setDate(d.getDate() + umbralDias(c));
     return d.toISOString().slice(0, 10);
   }
   function estaParaContactarHoy(c) {
@@ -920,7 +920,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     if (c.rol === 'vendedor') {
       return `${saludo}¿sigue en pie la venta de tu vivienda${c.zona ? ' en ' + c.zona : ''}? Cuéntame cómo lo llevas.`;
     }
-    const candidatos = (state.pisos || []).filter(p => {
+    const candidatos = pisosVigentes().filter(p => {
       if (p.reservado) return false;
       if (!zonaMatches(p.zona, c.zona)) return false;
       if (c.tipo && p.tipo && c.tipo !== p.tipo) return false;
@@ -1083,7 +1083,15 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   // coincidencias activas (por ejemplo, si ya se marcó como contactado),
   // se lleva en su lugar a su ficha en Compradores.
   let compradorDesdeEnlaceAbierto = false;
+  let tabDesdeEnlaceAbierta = false;
   function abrirCompradorDesdeEnlace() {
+    // "/?tab=sincontacto": lo manda el aviso resumen de "tienes N contactos
+    // por contactar", para caer directamente en esa lista.
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab && !tabDesdeEnlaceAbierta && ['sincontacto', 'matches', 'compradores', 'vendedores', 'pisos'].includes(tab)) {
+      tabDesdeEnlaceAbierta = true;
+      document.querySelector(`nav.tabs button[data-tab="${tab}"]`)?.click();
+    }
     if (compradorDesdeEnlaceAbierto) return;
     const id = new URLSearchParams(window.location.search).get('comprador');
     if (!id) return;
@@ -1474,9 +1482,28 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   // encaje (quien busca hasta 350.000 € no quiere ver uno de 123.000 €).
   const PRESUPUESTO_MIN_PCT = 0.6;
 
+  // Cuando un piso baja de precio, el scraper guarda una fila nueva (con el
+  // precio nuevo y el anterior) y la fila vieja se queda. Para no ofrecer el
+  // mismo piso dos veces (una a cada precio), solo cuenta la fila más
+  // reciente de cada referencia.
+  function pisosVigentes() {
+    const ultima = new Map();
+    for (const p of state.pisos) {
+      if (!p.referencia) continue;
+      const u = ultima.get(p.referencia);
+      if (!u || new Date(p.fecha || 0) > new Date(u.fecha || 0)) ultima.set(p.referencia, p);
+    }
+    return state.pisos.filter(p => !p.referencia || ultima.get(p.referencia) === p);
+  }
+  function esBajada(p) { return !!(p.precio_anterior && p.precio && Number(p.precio_anterior) > Number(p.precio)); }
+  function bajadaTexto(p) {
+    if (!esBajada(p)) return '';
+    return ` (ha bajado, antes ${fmtMoney(p.precio_anterior)}${p.bajada_pct ? ', -' + p.bajada_pct + '%' : ''})`;
+  }
+
   function computeMatches() {
     const matches = [];
-    for (const piso of state.pisos) {
+    for (const piso of pisosVigentes()) {
       if (piso.reservado) continue; // reservado: no se ofrece a compradores
       for (const comprador of state.compradores) {
         if (comprador.rol === 'vendedor') continue; // vendedores puros no buscan piso
@@ -1502,10 +1529,26 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     return matches;
   }
 
-  // Mismo umbral que UMBRAL_DIAS en scraper/notify_inactivity.py: 14 días
-  // sin contacto es cuando salta el aviso push y cuando aparece aquí, en la
-  // pestaña "Sin contacto".
-  const UMBRAL_DIAS_INACTIVIDAD = 14;
+  // Cada cuántos días sin contacto salta el aviso push y aparece el
+  // contacto en la pestaña "Sin contacto". Mismos valores que en
+  // scraper/notify_inactivity.py (si se cambian, cambiarlos en los dos sitios):
+  // - clientes nuestros (compradores, "compra y vende" y vendedores marcados
+  //   como "cliente nuestro"): cada 5 días.
+  // - vendedores que todavía NO son clientes nuestros: cada 14 días.
+  const UMBRAL_DIAS_CLIENTE = 5;
+  const UMBRAL_DIAS_VENDEDOR_NO_CLIENTE = 14;
+  function esVendedorNoCliente(c) { return c.rol === 'vendedor' && !c.cliente_nuestro; }
+  function umbralDias(c) { return esVendedorNoCliente(c) ? UMBRAL_DIAS_VENDEDOR_NO_CLIENTE : UMBRAL_DIAS_CLIENTE; }
+  // La casilla "¿Es cliente nuestro?" solo se enseña (y solo se guarda) si la
+  // columna cliente_nuestro ya existe en la base de datos; si aún no se ha
+  // creado, todo sigue funcionando y los vendedores cuentan como "no cliente".
+  function hayColumnaClienteNuestro() { return state.compradores.some(c => 'cliente_nuestro' in c); }
+  function clienteTagHtml(c) {
+    if (c.rol !== 'vendedor' || !hayColumnaClienteNuestro()) return '';
+    return c.cliente_nuestro
+      ? '<span class="estado-tag estado-activo">Cliente nuestro</span>'
+      : '<span class="estado-tag estado-descartado">Aún no es cliente</span>';
+  }
 
   function computeStale() {
     return state.compradores
@@ -1602,17 +1645,17 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     const chars = caractSinUrl(p);
     return `
       <div class="match-piso-row">
-        <div class="piso-line1"><span>${esc(p.zona)}${p.tipo ? ' · ' + esc(p.tipo) : ''}</span><span class="num">${fmtMoney(p.precio)}</span></div>
+        <div class="piso-line1"><span>${esc(p.zona)}${p.tipo ? ' · ' + esc(p.tipo) : ''}${esBajada(p) ? `<span class="drop-tag">Bajada${p.bajada_pct ? ' -' + esc(String(p.bajada_pct)) + '%' : ''}</span>` : ''}</span><span class="num">${esBajada(p) ? `<span style="text-decoration:line-through;opacity:0.55;margin-right:6px;">${fmtMoney(p.precio_anterior)}</span>` : ''}${fmtMoney(p.precio)}</span></div>
         ${chars ? `<div class="piso-chars">${esc(chars.slice(0, 90))}</div>` : ''}
         ${p.url ? `<div class="piso-chars"><a href="${esc(p.url)}" target="_blank" rel="noopener">Ver ficha</a></div>` : ''}
       </div>`;
   }
 
   function buildMessage(comprador, piso) {
-    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. Ha entrado un piso en ${piso.zona}`;
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. ${esBajada(piso) ? 'Ha bajado de precio un piso' : 'Ha entrado un piso'} en ${piso.zona}`;
     if (piso.tipo) msg += ` (${piso.tipo.toLowerCase()})`;
     msg += ` que puede encajar con lo que buscas`;
-    if (piso.precio) msg += `: ${fmtMoney(piso.precio)}`;
+    if (piso.precio) msg += `: ${fmtMoney(piso.precio)}${bajadaTexto(piso)}`;
     const chars = caractSinUrl(piso);
     if (chars) msg += `. ${chars}`;
     if (piso.url) msg += `\n${piso.url}`;
@@ -1621,10 +1664,19 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   }
 
   function buildGroupMessage(comprador, list) {
-    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. Tenemos estas viviendas que encajan con lo que buscas:\n\n`;
+    const nBajadas = list.filter(m => esBajada(m.piso)).length;
+    let intro = 'Tenemos estas viviendas que encajan con lo que buscas';
+    if (nBajadas && nBajadas === list.length) {
+      intro = nBajadas === 1
+        ? 'Ha bajado de precio esta vivienda que encaja con lo que buscas'
+        : 'Han bajado de precio estas viviendas que encajan con lo que buscas';
+    } else if (nBajadas) {
+      intro += nBajadas === 1 ? ' (una acaba de bajar de precio)' : ' (algunas acaban de bajar de precio)';
+    }
+    let msg = `Hola ${nombreCorto(comprador.nombre)}, soy de Inmoparadise. ${intro}:\n\n`;
     list.forEach((m, i) => {
       const p = m.piso;
-      msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}\n`;
+      msg += `${i + 1}) ${p.zona}${p.tipo ? ' · ' + p.tipo : ''} — ${fmtMoney(p.precio)}${bajadaTexto(p)}\n`;
       const chars = caractSinUrl(p);
       if (chars) msg += `${chars.slice(0, 90)}\n`;
       if (p.url) msg += `${p.url}\n`;
@@ -1864,6 +1916,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
           <div><label>Nombre</label><input type="text" id="edit-nombre-${c.id}" value="${esc(c.nombre)}"></div>
           <div><label>Teléfono</label><input type="tel" id="edit-telefono-${c.id}" value="${esc(c.telefono)}"></div>
           <div><label>Es</label><select id="edit-rol-${c.id}">${rolOptionsHtml(c.rol)}</select></div>
+          ${c.rol === 'vendedor' && hayColumnaClienteNuestro() ? `<div><label>¿Es cliente nuestro?</label><select id="edit-cliente-${c.id}"><option value="no"${c.cliente_nuestro ? '' : ' selected'}>No, todavía no (aviso cada 14 días)</option><option value="si"${c.cliente_nuestro ? ' selected' : ''}>Sí, ya es cliente (aviso cada 5 días)</option></select></div>` : ''}
           <div><label>Estado</label><select id="edit-estado-${c.id}">${estadoOptionsHtml(c.estado)}</select></div>
           <div><label>Próxima fecha de contacto</label><input type="date" id="edit-proxima-${c.id}" value="${c.proxima_contacto || ''}"></div>
           ${agenteSelectorHtml(`edit-owner-${c.id}`, c.owner_id)}
@@ -1891,7 +1944,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     return `
       <li class="item${paraContactarHoy ? ' para-contactar-hoy' : ''}" id="comprador-${c.id}">
         <div class="item-main">
-          <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${estadoTagHtml(c.estado)}${paraContactarHoy ? '<span class="contactar-tag">Para contactar hoy</span>' : ''}</div>
+          <div class="item-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${clienteTagHtml(c)}${estadoTagHtml(c.estado)}${paraContactarHoy ? '<span class="contactar-tag">Para contactar hoy</span>' : ''}</div>
           <div class="item-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'sin zona'} · ${esc(c.tipo) || 'cualquier tipo'} · <span class="num">${fmtMoney(c.presupuesto)}</span>${c.habitaciones_min ? ` · mín. ${c.habitaciones_min} hab` : ''}${ascensorPlantaTexto(c)}</div>
           ${c.caract ? `<div class="item-chars">${esc(c.caract)}</div>` : ''}
           ${c.notas ? `<div class="item-notes"><strong>Notas:</strong> ${esc(c.notas)}</div>` : ''}
@@ -2017,6 +2070,8 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
       notas: document.getElementById(`edit-notas-${id}`).value.trim(),
       proxima_contacto: document.getElementById(`edit-proxima-${id}`) ? (document.getElementById(`edit-proxima-${id}`).value || null) : null,
     };
+    const clienteSel = document.getElementById(`edit-cliente-${id}`);
+    if (clienteSel) patch.cliente_nuestro = clienteSel.value === 'si';
     const ownerSel = document.getElementById(`edit-owner-${id}`);
     if (ownerSel) {
       const perfil = state.perfiles.find(p => p.id === ownerSel.value);
@@ -2246,7 +2301,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
             <div class="match-group-meta"><span class="num">${esc(g.comprador.telefono)}</span> · ${esc(g.comprador.zona) || 'cualquier zona'} · <span class="num">${fmtMoney(g.comprador.presupuesto)}</span>/mes</div>
             <div class="item-by">Comercial: ${esc(g.comprador.agente) || 'sin asignar'}</div>
           </div>
-          <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}</span>
+          <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}${g.all.some(m => esBajada(m.piso)) ? ' · con bajada de precio' : ''}</span>
         </div>
         <div class="match-piso-list">${g.top.map(pisoLineHtml).join('')}</div>
         ${restantes > 0 ? `<div class="match-piso-more">+${restantes} más — se incluirán en un próximo envío</div>` : ''}
@@ -2303,7 +2358,7 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
             <div class="match-group-meta"><span class="num">${esc(g.comprador.telefono)}</span> · ${esc(g.comprador.zona) || 'cualquier zona'} · <span class="num">${fmtMoney(g.comprador.presupuesto)}</span></div>
             <div class="item-by">Comercial: ${esc(g.comprador.agente) || 'sin asignar'}</div>
           </div>
-          <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}</span>
+          <span class="match-group-count">${g.all.length} coincidencia${g.all.length === 1 ? '' : 's'}${g.all.some(m => esBajada(m.piso)) ? ' · con bajada de precio' : ''}</span>
         </div>
         <div class="match-piso-list">${g.top.map(pisoLineHtml).join('')}</div>
         ${restantes > 0 ? `<div class="match-piso-more">+${restantes} más — se incluirán en un próximo envío</div>` : ''}
@@ -2334,8 +2389,9 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     });
   }
 
-  // Compradores y vendedores activos con 14+ días sin contacto (mismo
-  // umbral que el aviso push de inactividad). El botón WhatsApp usa
+  // Contactos activos a los que ya toca escribir: 5+ días sin contacto si
+  // son clientes, 14+ si son vendedores que aún no son clientes (mismos
+  // umbrales que el aviso push de inactividad). El botón WhatsApp usa
   // mensajeInactividad(c), que ya decide solo si ofrece pisos (comprador)
   // o solo pregunta si sigue vendiendo (vendedor).
   function renderSinContacto() {
@@ -2343,16 +2399,16 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
     const stale = computeStale();
     document.getElementById('count-sincontacto').textContent = stale.length;
     if (!stale.length) {
-      el.innerHTML = emptyState('Nadie lleva 14 días o más sin contacto ahora mismo. 🎉');
+      el.innerHTML = emptyState('Estás al día: no hay nadie pendiente de contactar ahora mismo. 🎉');
       return;
     }
     el.innerHTML = stale.map(({ c, dias }) => `
       <div class="match-group" id="sincontacto-${c.id}">
         <div class="match-group-header">
           <div>
-            <div class="match-group-name">${esc(c.nombre)}${rolTagHtml(c.rol)}</div>
+            <div class="match-group-name">${esc(c.nombre)}${rolTagHtml(c.rol)}${clienteTagHtml(c)}</div>
             <div class="match-group-meta"><span class="num">${esc(c.telefono)}</span> · ${esc(c.zona) || 'cualquier zona'}${c.rol !== 'vendedor' ? ` · <span class="num">${fmtMoney(c.presupuesto)}</span>` : ''}</div>
-            <div class="item-by">Comercial: ${esc(c.agente) || 'sin asignar'} · hace ${dias} días sin contacto</div>
+            <div class="item-by">Comercial: ${esc(c.agente) || 'sin asignar'} · ${dias === null ? 'sin contacto' : dias === 0 ? 'contactado hoy' : dias === 1 ? '1 día sin contacto' : dias + ' días sin contacto'} · se avisa cada ${umbralDias(c)} días</div>
           </div>
         </div>
         <div class="match-group-actions">

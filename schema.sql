@@ -417,3 +417,14 @@ alter table public.compradores add column if not exists ultimo_contacto timestam
 alter table public.compradores add column if not exists ultimo_aviso_inactividad timestamptz;
 alter table public.alquiler_clientes add column if not exists ultimo_contacto timestamptz;
 alter table public.alquiler_clientes add column if not exists ultimo_aviso_inactividad timestamptz;
+
+-- ============================================================
+-- Vendedores: ¿ya es cliente nuestro?
+-- ============================================================
+-- Los recordatorios de "llevas días sin contactar" saltan cada 5 días
+-- para los clientes (compradores, "compra y vende" y vendedores que ya
+-- son clientes nuestros) y cada 14 días para los vendedores que
+-- todavía NO son clientes (propietarios a los que se intenta captar).
+-- Esta columna es la casilla "¿Es cliente nuestro?" de la ficha de un
+-- vendedor. Por defecto, no lo es.
+alter table public.compradores add column if not exists cliente_nuestro boolean not null default false;
