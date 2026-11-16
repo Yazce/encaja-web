@@ -2510,9 +2510,9 @@ const cuando = dias === null ? '' : dias === 0 ? 'hoy' : dias === 1 ? 'ayer' : d
   // de un cliente de Daniel, el mensaje dice "soy Daniel". Solo si el
   // contacto no tiene comercial reconocible se usa el nombre de quien envía.
   function nombreValido(n) {
-    n = (n || '').trim().split(/s+/)[0] || '';
+    n = (n || '').trim().split(/\s+/)[0] || '';
     // Un email o un usuario genérico ("usuario3") no sirve como firma.
-    if (!n || n.includes('@') || /^usuariod*$/i.test(n)) return '';
+    if (!n || n.includes('@') || /^usuario\d*$/i.test(n)) return '';
     return capitaliza(n);
   }
   function nombreComercial(c) {
